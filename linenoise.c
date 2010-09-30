@@ -81,6 +81,14 @@
  *    Sequence: ESC [ 2 J
  *    Effect: clear the whole screen
  * 
+ * For highlighting control characters, we also use:
+ * SO (enter StandOut)
+ *    Sequence: ESC [ 7 m
+ *    Effect: Uses some standout mode such as reverse video
+ *
+ * SE (Standout End)
+ *    Sequence: ESC [ 0 m
+ *    Effect: Exit standout mode
  */
 
 #include <termios.h>
@@ -211,9 +219,8 @@ static void refreshLine(int fd, const char *prompt, char *buf, size_t len, size_
         if (buf[i] < ' ') {
             write(fd, buf + p, i - p);
             p = i + 1;
-            seq[0] = '^';
-            seq[1] = buf[i] + '@';
-            write(fd, seq, 2);
+            snprintf(seq,64,"\033[7m^%c\033[0m", buf[i] + '@');
+            if (write(fd,seq,strlen(seq)) == -1) return;
             if (i < pos) {
                 extra++;
             }
