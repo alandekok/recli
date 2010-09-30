@@ -190,6 +190,8 @@ static int getColumns(void) {
 static void refreshLine(int fd, const char *prompt, char *buf, size_t len, size_t pos, size_t cols) {
     char seq[64];
     size_t plen = strlen(prompt);
+    int extra = 0;
+    size_t i, p;
     
     while((plen+pos) >= cols) {
         buf++;
@@ -205,12 +207,26 @@ static void refreshLine(int fd, const char *prompt, char *buf, size_t len, size_
     if (write(fd,seq,strlen(seq)) == -1) return;
     /* Write the prompt and the current buffer content */
     if (write(fd,prompt,strlen(prompt)) == -1) return;
-    if (write(fd,buf,len) == -1) return;
+    /* Need special handling for control characters */
+    p = 0;
+    for (i = 0; i < len; i++) {
+        if (buf[i] < ' ') {
+            write(fd, buf + p, i - p);
+            p = i + 1;
+            seq[0] = '^';
+            seq[1] = buf[i] + '@';
+            write(fd, seq, 2);
+            if (i < pos) {
+                extra++;
+            }
+        }
+    }
+    write(fd, buf + p, i - p);
     /* Erase to right */
     snprintf(seq,64,"\x1b[0K");
     if (write(fd,seq,strlen(seq)) == -1) return;
     /* Move cursor to original position. */
-    snprintf(seq,64,"\x1b[0G\x1b[%dC", (int)(pos+plen));
+    snprintf(seq,64,"\x1b[0G\x1b[%dC", (int)(pos+plen+extra));
     if (write(fd,seq,strlen(seq)) == -1) return;
 }
 
@@ -437,8 +453,9 @@ up_down_arrow:
 		}
 	    }
 
-            if (len < buflen) {
-                if (len == pos) {
+            /* Note that the only control character currently permitted is tab */
+            if (len < buflen && (c == '\t' || c >= ' ')) {
+                if (len == pos && c >= ' ') {
                     buf[pos] = c;
                     pos++;
                     len++;
