@@ -367,6 +367,24 @@ process_char:
                 free(history[history_len]);
                 return -1;
             }
+        case 23:    /* ctrl-w */
+            /* eat any spaces on the left */
+            {
+                int n = 0;
+                while (pos > 0 && len > 0 && buf[pos - 1] == ' ') {
+                    pos--;
+                    len--;
+                    n++;
+                }
+                /* now eat any non-spaces on the left */
+                while (pos > 0 && len > 0 && buf[pos - 1] != ' ') {
+                    pos--;
+                    len--;
+                    n++;
+                }
+                memmove(buf+pos,buf+pos+n,len-pos);
+                refreshLine(fd,prompt,buf,len,pos,cols);
+            }
             break;
         case 18:    /* ctrl-r */
             {
