@@ -46,12 +46,10 @@
  *
  * Todo list:
  * - Switch to gets() if $TERM is something we can't support.
- * - Filter bogus Ctrl+<char> combinations.
  * - Win32 support
  *
  * Bloat:
  * - Completion?
- * - History search like Ctrl+r in readline?
  *
  * List of escape sequences used by this program, we do everything just
  * with three sequences. In order to be so cheap we may have some
@@ -326,6 +324,7 @@ static int linenoisePrompt(int fd, char *buf, size_t buflen, const char *prompt)
         char seq[2], seq2[2];
 
         nread = read(fd,&c,1);
+process_char:
         if (nread <= 0) return len;
 
         /* Only autocomplete when the callback is set. It returns < 0 when
@@ -367,6 +366,64 @@ static int linenoisePrompt(int fd, char *buf, size_t buflen, const char *prompt)
                 history_len--;
                 free(history[history_len]);
                 return -1;
+            }
+            break;
+        case 18:    /* ctrl-r */
+            {
+                /* Display the reverse-i-search prompt and process chars */
+                char rbuf[50];
+                char rprompt[80];
+                int i = 0;
+                rbuf[0] = 0;
+                while (1) {
+                    snprintf(rprompt, sizeof(rprompt), "(reverse-i-search)'%s': ", rbuf);
+                    refreshLine(fd,rprompt,buf,len,pos,cols);
+                    nread = read(fd,&c,1);
+                    if (nread == 1) {
+                        if (c == 8 || c == 127) {
+                            if (i > 0) {
+                                rbuf[--i] = 0;
+                            }
+                            continue;
+                        }
+                        if (c == 7) {
+                            /* ctrl-g terminates the search with no effect */
+                            buf[0] = 0;
+                            len = 0;
+                            pos = 0;
+                            break;
+                        }
+                        if (c >= ' ' && c <= '~') {
+                            if (i < (int)sizeof(rbuf)) {
+                                int j;
+                                const char *p = NULL;
+                                rbuf[i++] = c;
+                                rbuf[i] = 0;
+                                /* Now search back through the history for a match */
+                                for (j = history_len - 1; j > 0; j--) {
+                                    p = strstr(history[j], rbuf);
+                                    if (p) {
+                                        /* Found a match. Copy it */
+                                        strncpy(buf,history[j],buflen);
+                                        buf[buflen] = '\0';
+                                        len = strlen(buf);
+                                        pos = p - history[j];
+                                        break;
+                                    }
+                                }
+                                if (!p) {
+                                    /* No match, so don't add it */
+                                    rbuf[--i] = 0;
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                /* Go process the char normally */
+                refreshLine(fd,prompt,buf,len,pos,cols);
+                goto process_char;
             }
             break;
         case 20:    /* ctrl-t */
