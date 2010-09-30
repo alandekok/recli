@@ -306,6 +306,7 @@ static int linenoisePrompt(int fd, char *buf, size_t buflen, const char *prompt)
     while(1) {
         char c;
         int nread;
+        int ext;
         char seq[2], seq2[2];
 
         nread = read(fd,&c,1);
@@ -374,21 +375,22 @@ static int linenoisePrompt(int fd, char *buf, size_t buflen, const char *prompt)
             break;
         case 27:    /* escape sequence */
             if (read(fd,seq,2) == -1) break;
-            if (seq[0] == 91 && seq[1] == 68) {
+            ext = (seq[0] == 91 || seq[0] == 79);
+            if (ext && seq[1] == 68) {
 left_arrow:
                 /* left arrow */
                 if (pos > 0) {
                     pos--;
                     refreshLine(fd,prompt,buf,len,pos,cols);
                 }
-            } else if (seq[0] == 91 && seq[1] == 67) {
+            } else if (ext && seq[1] == 67) {
 right_arrow:
                 /* right arrow */
                 if (pos != len) {
                     pos++;
                     refreshLine(fd,prompt,buf,len,pos,cols);
                 }
-            } else if (seq[0] == 91 && (seq[1] == 65 || seq[1] == 66)) {
+            } else if (ext && (seq[1] == 65 || seq[1] == 66)) {
 up_down_arrow:
                 /* up and down arrow: history */
                 if (history_len > 1) {
