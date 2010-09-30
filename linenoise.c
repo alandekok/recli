@@ -460,6 +460,29 @@ process_char:
                 refreshLine(fd,prompt,buf,len,pos,cols);
             }
             break;
+        case 22:    /* ctrl-v */
+            if (len < buflen) {
+                /* Insert the ^V first */
+                memmove(buf+pos+1,buf+pos,len-pos);
+                buf[pos] = c;
+                len++;
+                pos++;
+                buf[len] = '\0';
+                refreshLine(fd,prompt,buf,len,pos,cols);
+                /* Now wait for the next char. Can insert anything except \0 */
+                nread = read(fd,&c,1);
+                if (nread == 1 && c) {
+                    /* Replace the ^V with the actual char */
+                    buf[pos - 1] = c;
+                }
+                else {
+                    /* Remove the ^V */
+                    pos--;
+                    memmove(buf+pos,buf+pos+1,len-pos);
+                }
+                refreshLine(fd,prompt,buf,len,pos,cols);
+            }
+            break;
         case 2:     /* ctrl-b */
             goto left_arrow;
         case 6:     /* ctrl-f */
