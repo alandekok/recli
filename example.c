@@ -3,9 +3,6 @@
 #include "linenoise.h"
 
 #ifndef NO_COMPLETION
-static int in_string = 0;
-static size_t string_start = 0;
-
 void completion(const char *buf, linenoiseCompletions *lc) {
     if (buf[0] == 'h') {
         linenoiseAddCompletion(lc,"hello");
@@ -13,6 +10,9 @@ void completion(const char *buf, linenoiseCompletions *lc) {
     }
 }
 #endif
+
+static int in_string = 0;
+static size_t string_start = 0;
 
 int foundspace(const char *buf, size_t len, char c) {
     if (in_string) return 0;
