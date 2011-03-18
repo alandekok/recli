@@ -6,5 +6,8 @@ linenoise_example: linenoise.h linenoise.c example.c
 linenoise_utf8_example: linenoise.c utf8.c example.c
 	$(CC) -DNO_COMPLETION -DUSE_UTF8 -Wall -W -Os -g -o $@ linenoise.c utf8.c example.c
 
+test_cpp_compile: linenoise.h linenoise.c
+	g++ -Wall -W -Os -g -c -o linenoise.o linenoise.c 
+
 clean:
 	rm -f linenoise_example linenoise_utf8_example

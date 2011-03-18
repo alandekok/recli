@@ -115,7 +115,7 @@
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
-static char *unsupported_term[] = {"dumb","cons25",NULL};
+static const char *unsupported_term[] = {"dumb","cons25",NULL};
 static linenoiseCharacterCallback *characterCallback[256] = { NULL };
 
 static struct termios orig_termios; /* in order to restore at exit */
@@ -209,7 +209,7 @@ struct current {
 };
 
 /* gcc/glibc insists that we care about the return code of write! */
-#define IGNORE_RC(EXPR) ((EXPR) < 0 ? -1 : 0)
+#define IGNORE_RC(EXPR) if (EXPR) {}
 
 /* This is fd_printf() on some systems, but use a different
  * name to avoid conflicts
@@ -505,7 +505,7 @@ void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn) {
 }
 
 void linenoiseAddCompletion(linenoiseCompletions *lc, const char *str) {
-    lc->cvec = realloc(lc->cvec,sizeof(char*)*(lc->len+1));
+    lc->cvec = (char **)realloc(lc->cvec,sizeof(char*)*(lc->len+1));
     lc->cvec[lc->len++] = strdup(str);
 }
 
@@ -948,7 +948,7 @@ process_char:
 	       int rcode;
 
 	       rcode = characterCallback[(int)c](current->buf,current->len,c);
-	       refreshLine(prompt, current);
+	       refreshLine(current->prompt, current);
 	       if (rcode == 1) {
 		   continue;
 		}
@@ -1064,7 +1064,7 @@ int linenoiseHistoryAdd(const char *line) {
 
     if (history_max_len == 0) return 0;
     if (history == NULL) {
-        history = malloc(sizeof(char*)*history_max_len);
+        history = (char**)malloc(sizeof(char*)*history_max_len);
         if (history == NULL) return 0;
         memset(history,0,(sizeof(char*)*history_max_len));
     }
@@ -1081,18 +1081,18 @@ int linenoiseHistoryAdd(const char *line) {
 }
 
 int linenoiseHistorySetMaxLen(int len) {
-    char **new;
+    char **newHistory;
 
     if (len < 1) return 0;
     if (history) {
         int tocopy = history_len;
 
-        new = malloc(sizeof(char*)*len);
-        if (new == NULL) return 0;
+        newHistory = (char**)malloc(sizeof(char*)*len);
+        if (newHistory == NULL) return 0;
         if (len < tocopy) tocopy = len;
-        memcpy(new,history+(history_max_len-tocopy), sizeof(char*)*tocopy);
+        memcpy(newHistory,history+(history_max_len-tocopy), sizeof(char*)*tocopy);
         free(history);
-        history = new;
+        history = newHistory;
     }
     history_max_len = len;
     if (history_len > history_max_len)
