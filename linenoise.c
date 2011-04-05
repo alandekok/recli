@@ -52,7 +52,7 @@
  * - Completion?
  *
  * List of escape sequences used by this program, we do everything just
- * with three sequences. In order to be so cheap we may have some
+ * a few sequences. In order to be so cheap we may have some
  * flickering effect with some slow terminal, but the lesser sequences
  * the more compatible.
  *
@@ -127,6 +127,7 @@ static char **history = NULL;
 
 static void linenoiseAtExit(void);
 static int fd_read(int fd);
+static void getColumns(int fd, int *cols);
 
 static int isUnsupportedTerm(void) {
     char *term = getenv("TERM");
@@ -193,13 +194,6 @@ static void disableRawMode(int fd) {
 static void linenoiseAtExit(void) {
     disableRawMode(STDIN_FILENO);
     freeHistory();
-}
-
-static int getColumns(void) {
-    struct winsize ws;
-
-    if (ioctl(1, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) return 80;
-    return ws.ws_col;
 }
 
 /* Structure to contain the status of the current (being edited) line */
@@ -269,7 +263,7 @@ static void refreshLine(const char *prompt, struct current *current) {
     int n;
 
     /* Should intercept SIGWINCH. For now, just get the size every time */
-    current->cols = getColumns();
+    getColumns(current->fd, &current->cols);
 
     plen = strlen(prompt);
     pchars = utf8_strlen(prompt, plen);
@@ -380,6 +374,7 @@ static int remove_char(struct current *current, int pos)
     return 0;
 }
 
+/* XXX: Optimise this later */
 static int insert_char(struct current *current, int pos, int ch)
 {
     char buf[3];
@@ -548,6 +543,52 @@ static int fd_read(int fd)
 #else
     return fd_read_char(fd, -1);
 #endif
+}
+
+static void getColumns(int fd, int *cols) {
+    struct winsize ws;
+
+    if (ioctl(1, TIOCGWINSZ, &ws) == 0 && ws.ws_col != 0) {
+        *cols = ws.ws_col;
+        return;
+    }
+    /* Failed to query the window size. Perhaps we are on a serial terminal.
+     * Try to query the width by sending the cursor as far to the right
+     * and reading back the cursor position.
+     * Note that this is only done once per call to linenoise rather than
+     * every time the line is refreshed for efficiency reasons.
+     */
+    if (*cols == 0) {
+        *cols = 80;
+
+        /* Move cursor far right and report cursor position */
+        fd_printf(fd, "\x1b[999G" "\x1b[6n");
+
+        /* Parse the response: ESC [ rows ; cols R */
+        if (fd_read_char(fd, 100) == 0x1b && fd_read_char(fd, 100) == '[') {
+            int n = 0;
+            while (1) {
+                int ch = fd_read_char(fd, 100);
+                if (ch == ';') {
+                    /* Ignore rows */
+                    n = 0;
+                }
+                else if (ch == 'R') {
+                    /* Got cols */
+                    if (n != 0 && n < 1000) {
+                        *cols = n;
+                    }
+                    break;
+                }
+                else if (ch >= 0 && ch <= '9') {
+                    n = n * 10 + ch - '0';
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 /* Use -ve numbers here to co-exist with normal unicode chars */
