@@ -2,15 +2,17 @@
 #include <stdlib.h>
 #include "linenoise.h"
 
+#ifndef NO_COMPLETION
 static int in_string = 0;
 static size_t string_start = 0;
 
-void completion(const char *buf, size_t len, linenoiseCompletions *lc) {
+void completion(const char *buf, linenoiseCompletions *lc) {
     if (buf[0] == 'h') {
         linenoiseAddCompletion(lc,"hello");
         linenoiseAddCompletion(lc,"hello there");
     }
 }
+#endif
 
 int foundspace(const char *buf, size_t len, char c) {
     if (in_string) return 0;
@@ -64,7 +66,9 @@ int foundhelp(const char *buf, size_t len, char c) {
 int main(void) {
     char *line;
 
+#ifndef NO_COMPLETION
     linenoiseSetCompletionCallback(completion);
+#endif
     linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
     linenoiseSetCharacterCallback(foundspace, ' ');
     linenoiseSetCharacterCallback(foundquote, '"');
