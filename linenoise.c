@@ -58,7 +58,7 @@
  *
  * CHA (Cursor Horizontal Absolute)
  *    Sequence: ESC [ n G
- *    Effect: moves cursor to column n
+ *    Effect: moves cursor to column n (1 based)
  *
  * EL (Erase Line)
  *    Sequence: ESC [ n K
@@ -305,7 +305,7 @@ static void refreshLine(const char *prompt, struct current *current) {
     }
 
     /* Cursor to left edge, then the prompt */
-    fd_printf(current->fd, "\x1b[0G");
+    fd_printf(current->fd, "\x1b[1G");
     IGNORE_RC(write(current->fd, prompt, plen));
 
     /* Now the current buffer content */
@@ -341,7 +341,7 @@ static void refreshLine(const char *prompt, struct current *current) {
     IGNORE_RC(write(current->fd, buf, b));
 
     /* Erase to right, move cursor to original position */
-    fd_printf(current->fd, "\x1b[0K" "\x1b[0G\x1b[%dC", pos + pchars + backup);
+    fd_printf(current->fd, "\x1b[0K" "\x1b[1G\x1b[%dC", pos + pchars + backup);
 }
 
 static void set_current(struct current *current, const char *str)
