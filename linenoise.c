@@ -635,6 +635,8 @@ enum {
     SPECIAL_LEFT = -22,
     SPECIAL_RIGHT = -23,
     SPECIAL_DELETE = -24,
+    SPECIAL_HOME = -25,
+    SPECIAL_END = -26,
 };
 
 /**
@@ -670,6 +672,10 @@ static int check_special(int fd)
                 return SPECIAL_RIGHT;
             case 'D':
                 return SPECIAL_LEFT;
+            case 'F':
+                return SPECIAL_END;
+            case 'H':
+                return SPECIAL_HOME;
         }
     }
     if (c == '[' && c2 >= '1' && c2 <= '6') {
@@ -939,6 +945,14 @@ process_char:
                     if (remove_char(current, current->pos) == 1) {
                         refreshLine(current->prompt, current);
                     }
+                    break;
+                case SPECIAL_HOME:
+                    current->pos = 0;
+                    refreshLine(current->prompt, current);
+                    break;
+                case SPECIAL_END:
+                    current->pos = current->chars;
+                    refreshLine(current->prompt, current);
                     break;
             }
             }
