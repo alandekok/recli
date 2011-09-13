@@ -97,6 +97,8 @@
  */
 
 #include <termios.h>
+#include <sys/ioctl.h>
+#include <sys/poll.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -105,59 +107,96 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/poll.h>
 #include <unistd.h>
-#include "linenoise.h"
 
 #include "linenoise.h"
 #include "utf8.h"
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
-static const char *unsupported_term[] = {"dumb","cons25",NULL};
 static linenoiseCharacterCallback *characterCallback[256] = { NULL };
 
-static struct termios orig_termios; /* in order to restore at exit */
-static int rawmode = 0; /* for atexit() function to check if restore is needed*/
-static int atexit_registered = 0; /* register atexit just 1 time */
+#define ctrl(C) ((C) - '@')
+
+/* Use -ve numbers here to co-exist with normal unicode chars */
+enum {
+    SPECIAL_NONE,
+    SPECIAL_UP = -20,
+    SPECIAL_DOWN = -21,
+    SPECIAL_LEFT = -22,
+    SPECIAL_RIGHT = -23,
+    SPECIAL_DELETE = -24,
+    SPECIAL_HOME = -25,
+    SPECIAL_END = -26,
+};
+
 static int history_max_len = LINENOISE_DEFAULT_HISTORY_MAX_LEN;
 static int history_len = 0;
 static char **history = NULL;
 
-static void linenoiseAtExit(void);
-static int fd_read(int fd);
-static void getColumns(int fd, int *cols);
+/* Structure to contain the status of the current (being edited) line */
+struct current {
+    char *buf;  /* Current buffer. Always null terminated */
+    int bufmax; /* Size of the buffer, including space for the null termination */
+    int len;    /* Number of bytes in 'buf' */
+    int chars;  /* Number of chars in 'buf' (utf-8 chars) */
+    int pos;    /* Cursor position, measured in chars */
+    int cols;   /* Size of the window, in chars */
+    const char *prompt;
+    int fd;     /* Terminal fd */
+};
 
-static int isUnsupportedTerm(void) {
-    char *term = getenv("TERM");
-    int j;
+static int fd_read(struct current *current);
+static int getWindowSize(struct current *current);
 
-    if (term == NULL) return 0;
-    for (j = 0; unsupported_term[j]; j++)
-        if (!strcasecmp(term,unsupported_term[j])) return 1;
-    return 0;
-}
-
-static void freeHistory(void) {
+void linenoiseHistoryFree(void) {
     if (history) {
         int j;
 
         for (j = 0; j < history_len; j++)
             free(history[j]);
         free(history);
+        history = NULL;
     }
 }
 
-static int enableRawMode(int fd) {
+static void linenoiseAtExit(void);
+static struct termios orig_termios; /* in order to restore at exit */
+static int rawmode = 0; /* for atexit() function to check if restore is needed*/
+static int atexit_registered = 0; /* register atexit just 1 time */
+
+static const char *unsupported_term[] = {"dumb","cons25",NULL};
+
+static int isUnsupportedTerm(void) {
+    char *term = getenv("TERM");
+
+    if (term) {
+        int j;
+        for (j = 0; unsupported_term[j]; j++) {
+            if (strcasecmp(term, unsupported_term[j]) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int enableRawMode(struct current *current) {
     struct termios raw;
 
-    if (!isatty(STDIN_FILENO)) goto fatal;
+    current->fd = STDIN_FILENO;
+
+    if (!isatty(current->fd) || isUnsupportedTerm() ||
+        tcgetattr(current->fd, &orig_termios) == -1) {
+fatal:
+        errno = ENOTTY;
+        return -1;
+    }
+
     if (!atexit_registered) {
         atexit(linenoiseAtExit);
         atexit_registered = 1;
     }
-    if (tcgetattr(fd,&orig_termios) == -1) goto fatal;
 
     raw = orig_termios;  /* modify the original mode */
     /* input modes: no break, no CR to NL, no parity check, no strip char,
@@ -175,43 +214,33 @@ static int enableRawMode(int fd) {
     raw.c_cc[VMIN] = 1; raw.c_cc[VTIME] = 0; /* 1 byte, no timer */
 
     /* put terminal in raw mode after flushing */
-    if (tcsetattr(fd,TCSADRAIN,&raw) < 0) goto fatal;
+    if (tcsetattr(current->fd,TCSADRAIN,&raw) < 0) {
+        goto fatal;
+    }
     rawmode = 1;
-    return 0;
 
-fatal:
-    errno = ENOTTY;
-    return -1;
+    current->cols = 0;
+    return 0;
 }
 
-static void disableRawMode(int fd) {
+static void disableRawMode(struct current *current) {
     /* Don't even check the return value as it's too late. */
-    if (rawmode && tcsetattr(fd,TCSADRAIN,&orig_termios) != -1)
+    if (rawmode && tcsetattr(current->fd,TCSADRAIN,&orig_termios) != -1)
         rawmode = 0;
 }
 
 /* At exit we'll try to fix the terminal to the initial conditions. */
 static void linenoiseAtExit(void) {
-    disableRawMode(STDIN_FILENO);
-    freeHistory();
+    if (rawmode) {
+        tcsetattr(STDIN_FILENO, TCSADRAIN, &orig_termios);
+    }
+    linenoiseHistoryFree();
 }
-
-/* Structure to contain the status of the current (being edited) line */
-struct current {
-    int fd;     /* Terminal fd */
-    char *buf;  /* Current buffer. Always null terminated */
-    int bufmax; /* Size of the buffer, including space for the null termination */
-    int len;    /* Number of bytes in 'buf' */
-    int chars;  /* Number of chars in 'buf' (utf-8 chars) */
-    int pos;    /* Cursor position, measured in chars */
-    int cols;   /* Size of the window, in chars */
-    const char *prompt;
-};
 
 /* gcc/glibc insists that we care about the return code of write! */
 #define IGNORE_RC(EXPR) if (EXPR) {}
 
-/* This is fd_printf() on some systems, but use a different
+/* This is fdprintf() on some systems, but use a different
  * name to avoid conflicts
  */
 static void fd_printf(int fd, const char *format, ...)
@@ -226,301 +255,34 @@ static void fd_printf(int fd, const char *format, ...)
     IGNORE_RC(write(fd, buf, n));
 }
 
-static int utf8_getchars(char *buf, int c)
+static void clearScreen(struct current *current)
 {
-#ifdef USE_UTF8
-    return utf8_fromunicode(buf, c);
-#else
-    *buf = c;
-    return 1;
-#endif
+    fd_printf(current->fd, "\x1b[H\x1b[2J");
 }
 
-/**
- * Returns the unicode character at the given offset,
- * or -1 if none.
- */
-static int get_char(struct current *current, int pos)
+static void cursorToLeft(struct current *current)
 {
-    if (pos >= 0 && pos < current->chars) {
-        int c;
-        int i = utf8_index(current->buf, pos);
-        (void)utf8_tounicode(current->buf + i, &c);
-        return c;
-    }
-    return -1;
-}
-
-static void refreshLine(const char *prompt, struct current *current) {
-    int plen;
-    int pchars;
-    int backup = 0;
-    int i;
-    const char *buf = current->buf;
-    int chars = current->chars;
-    int pos = current->pos;
-    int b;
-    int ch;
-    int n;
-
-    /* Should intercept SIGWINCH. For now, just get the size every time */
-    getColumns(current->fd, &current->cols);
-
-    plen = strlen(prompt);
-    pchars = utf8_strlen(prompt, plen);
-
-    /* Account for a line which is too long to fit in the window.
-     * Note that control chars require an extra column
-     */
-
-    /* How many cols are required to the left of 'pos'?
-     * The prompt, plus one extra for each control char
-     */
-    n = pchars + utf8_strlen(buf, current->len);
-    b = 0;
-    for (i = 0; i < pos; i++) {
-        b += utf8_tounicode(buf + b, &ch);
-        if (ch < ' ') {
-            n++;
-        }
-    }
-
-    /* If too many are need, strip chars off the front of 'buf'
-     * until it fits. Note that if the current char is a control character,
-     * we need one extra col.
-     */
-    if (current->pos < current->chars && get_char(current, current->pos) < ' ') {
-        n++;
-    }
-
-    while (n >= current->cols) {
-        b = utf8_tounicode(buf, &ch);
-        if (ch < ' ') {
-            n--;
-        }
-        n--;
-        buf += b;
-        pos--;
-        chars--;
-    }
-
-    /* Cursor to left edge, then the prompt */
     fd_printf(current->fd, "\x1b[1G");
-    IGNORE_RC(write(current->fd, prompt, plen));
-
-    /* Now the current buffer content */
-
-    /* Need special handling for control characters.
-     * If we hit 'cols', stop.
-     */
-    b = 0; /* unwritted bytes */
-    n = 0; /* How many control chars were written */
-    for (i = 0; i < chars; i++) {
-        int ch;
-        int w = utf8_tounicode(buf + b, &ch);
-        if (ch < ' ') {
-            n++;
-        }
-        if (pchars + i + n >= current->cols) {
-            break;
-        }
-        if (ch < ' ') {
-            /* A control character, so write the buffer so far */
-            IGNORE_RC(write(current->fd, buf, b));
-            buf += b + w;
-            b = 0;
-            fd_printf(current->fd, "\033[7m^%c\033[0m", ch + '@');
-            if (i < pos) {
-                backup++;
-            }
-        }
-        else {
-            b += w;
-        }
-    }
-    IGNORE_RC(write(current->fd, buf, b));
-
-    /* Erase to right, move cursor to original position */
-    fd_printf(current->fd, "\x1b[0K" "\x1b[1G\x1b[%dC", pos + pchars + backup);
 }
 
-static void set_current(struct current *current, const char *str)
+static int outputChars(struct current *current, const char *buf, int len)
 {
-    strncpy(current->buf, str, current->bufmax);
-    current->buf[current->bufmax - 1] = 0;
-    current->len = strlen(current->buf);
-    current->pos = current->chars = utf8_strlen(current->buf, current->len);
+    return write(current->fd, buf, len);
 }
 
-static int has_room(struct current *current, int bytes)
+static void outputControlChar(struct current *current, char ch)
 {
-    return current->len + bytes < current->bufmax - 1;
+    fd_printf(current->fd, "\033[7m^%c\033[0m", ch);
 }
 
-/**
- * Removes the char at 'pos'.
- * 
- * Returns 1 if the line needs to be refreshed, 2 if not
- * and 0 if nothing was removed
- */
-static int remove_char(struct current *current, int pos)
+static void eraseEol(struct current *current)
 {
-    if (pos >= 0 && pos < current->chars) {
-        int p1, p2;
-        int ret = 1;
-        p1 = utf8_index(current->buf, pos);
-        p2 = p1 + utf8_index(current->buf + p1, 1);
-
-        /* optimise remove char in the case of removing the last char */
-        if (current->pos == pos + 1 && current->pos == current->chars) {
-            if (current->buf[pos] >= ' ' && utf8_strlen(current->prompt, -1) + utf8_strlen(current->buf, current->len) < current->cols - 1) {
-                ret = 2;
-                fd_printf(current->fd, "\b \b");
-            }
-        }
-
-        /* Move the null char too */
-        memmove(current->buf + p1, current->buf + p2, current->len - p2 + 1);
-        current->len -= (p2 - p1);
-        current->chars--;
-
-        if (current->pos > pos) {
-            current->pos--;
-        }
-        return ret;
-    }
-    return 0;
+    fd_printf(current->fd, "\x1b[0K");
 }
 
-/**
- * Insert 'ch' at position 'pos'
- * 
- * Returns 1 if the line needs to be refreshed, 2 if not
- * and 0 if nothing was inserted (no room)
- */
-static int insert_char(struct current *current, int pos, int ch)
+static void setCursorPos(struct current *current, int x)
 {
-    char buf[3];
-    int n = utf8_getchars(buf, ch);
-
-    if (has_room(current, n) && pos >= 0 && pos <= current->chars) {
-        int p1, p2;
-        int ret = 1;
-        p1 = utf8_index(current->buf, pos);
-        p2 = p1 + n;
-
-        /* optimise the case where adding a single char to the end and no scrolling is needed */
-        if (current->pos == pos && current->chars == pos) {
-            if (ch >= ' ' && utf8_strlen(current->prompt, -1) + utf8_strlen(current->buf, current->len) < current->cols - 1) {
-                IGNORE_RC(write(current->fd, buf, n));
-                ret = 2;
-            }
-        }
-
-        memmove(current->buf + p2, current->buf + p1, current->len - p1);
-        memcpy(current->buf + p1, buf, n);
-        current->len += n;
-
-        current->chars++;
-        if (current->pos >= pos) {
-            current->pos++;
-        }
-        return ret;
-    }
-    return 0;
-}
-
-#ifndef NO_COMPLETION
-static linenoiseCompletionCallback *completionCallback = NULL;
-
-static void beep() {
-    fprintf(stderr, "\x7");
-    fflush(stderr);
-}
-
-static void freeCompletions(linenoiseCompletions *lc) {
-    size_t i;
-    for (i = 0; i < lc->len; i++)
-        free(lc->cvec[i]);
-    free(lc->cvec);
-}
-
-static int completeLine(struct current *current) {
-    linenoiseCompletions lc = { 0, NULL };
-    int c = 0;
-
-    completionCallback(current->buf,&lc);
-    if (lc.len == 0) {
-        beep();
-    } else {
-        size_t stop = 0, i = 0;
-
-        while(!stop) {
-            /* Show completion or original buffer */
-            if (i < lc.len) {
-                struct current tmp = *current;
-                tmp.buf = lc.cvec[i];
-                tmp.pos = tmp.len = strlen(tmp.buf);
-                tmp.chars = utf8_strlen(tmp.buf, tmp.len);
-                refreshLine(current->prompt, &tmp);
-            } else {
-                refreshLine(current->prompt, current);
-            }
-
-            c = fd_read(current->fd);
-            if (c < 0) {
-                break;
-            }
-
-            switch(c) {
-                case '\t': /* tab */
-                    i = (i+1) % (lc.len+1);
-                    if (i == lc.len) beep();
-                    break;
-                case 27: /* escape */
-                    /* Re-show original buffer */
-                    if (i < lc.len) {
-                        refreshLine(current->prompt, current);
-                    }
-                    stop = 1;
-                    break;
-                default:
-                    /* Update buffer and return */
-                    if (i < lc.len) {
-                        set_current(current,lc.cvec[i]);
-                    }
-                    stop = 1;
-                    break;
-            }
-        }
-    }
-
-    freeCompletions(&lc);
-    return c; /* Return last read character */
-}
-
-/* Register a callback function to be called for tab-completion. */
-void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn) {
-    completionCallback = fn;
-}
-
-void linenoiseAddCompletion(linenoiseCompletions *lc, const char *str) {
-    lc->cvec = (char **)realloc(lc->cvec,sizeof(char*)*(lc->len+1));
-    lc->cvec[lc->len++] = strdup(str);
-}
-
-#endif
-
-/**
- * Returns 0 if no chars were removed or non-zero otherwise.
- */
-static int remove_chars(struct current *current, int pos, int n)
-{
-    int removed = 0;
-    while (n-- && remove_char(current, pos)) {
-        removed++;
-    }
-    return removed;
+    fd_printf(current->fd, "\x1b[1G\x1b[%dC", x);
 }
 
 /**
@@ -552,7 +314,7 @@ static int fd_read_char(int fd, int timeout)
  * Reads a complete utf-8 character
  * and returns the unicode value, or -1 on error.
  */
-static int fd_read(int fd)
+static int fd_read(struct current *current)
 {
 #ifdef USE_UTF8
     char buf[4];
@@ -560,7 +322,7 @@ static int fd_read(int fd)
     int i;
     int c;
 
-    if (read(fd, &buf[0], 1) != 1) {
+    if (read(current->fd, &buf[0], 1) != 1) {
         return -1;
     }
     n = utf8_charlen(buf[0]);
@@ -568,7 +330,7 @@ static int fd_read(int fd)
         return -1;
     }
     for (i = 1; i < n; i++) {
-        if (read(fd, &buf[i], 1) != 1) {
+        if (read(current->fd, &buf[i], 1) != 1) {
             return -1;
         }
     }
@@ -577,34 +339,36 @@ static int fd_read(int fd)
     utf8_tounicode(buf, &c);
     return c;
 #else
-    return fd_read_char(fd, -1);
+    return fd_read_char(current->fd, -1);
 #endif
 }
 
-static void getColumns(int fd, int *cols) {
+static int getWindowSize(struct current *current)
+{
     struct winsize ws;
 
-    if (ioctl(1, TIOCGWINSZ, &ws) == 0 && ws.ws_col != 0) {
-        *cols = ws.ws_col;
-        return;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col != 0) {
+        current->cols = ws.ws_col;
+        return 0;
     }
+
     /* Failed to query the window size. Perhaps we are on a serial terminal.
      * Try to query the width by sending the cursor as far to the right
      * and reading back the cursor position.
      * Note that this is only done once per call to linenoise rather than
      * every time the line is refreshed for efficiency reasons.
      */
-    if (*cols == 0) {
-        *cols = 80;
+    if (current->cols == 0) {
+        current->cols = 80;
 
         /* Move cursor far right and report cursor position */
-        fd_printf(fd, "\x1b[999G" "\x1b[6n");
+        fd_printf(current->fd, "\x1b[999G" "\x1b[6n");
 
         /* Parse the response: ESC [ rows ; cols R */
-        if (fd_read_char(fd, 100) == 0x1b && fd_read_char(fd, 100) == '[') {
+        if (fd_read_char(current->fd, 100) == 0x1b && fd_read_char(current->fd, 100) == '[') {
             int n = 0;
             while (1) {
-                int ch = fd_read_char(fd, 100);
+                int ch = fd_read_char(current->fd, 100);
                 if (ch == ';') {
                     /* Ignore rows */
                     n = 0;
@@ -612,7 +376,7 @@ static void getColumns(int fd, int *cols) {
                 else if (ch == 'R') {
                     /* Got cols */
                     if (n != 0 && n < 1000) {
-                        *cols = n;
+                        current->cols = n;
                     }
                     break;
                 }
@@ -625,19 +389,8 @@ static void getColumns(int fd, int *cols) {
             }
         }
     }
+    return 0;
 }
-
-/* Use -ve numbers here to co-exist with normal unicode chars */
-enum {
-    SPECIAL_NONE,
-    SPECIAL_UP = -20,
-    SPECIAL_DOWN = -21,
-    SPECIAL_LEFT = -22,
-    SPECIAL_RIGHT = -23,
-    SPECIAL_DELETE = -24,
-    SPECIAL_HOME = -25,
-    SPECIAL_END = -26,
-};
 
 /**
  * If escape (27) was received, reads subsequent
@@ -694,7 +447,304 @@ static int check_special(int fd)
     return SPECIAL_NONE;
 }
 
-#define ctrl(C) ((C) - '@')
+static int utf8_getchars(char *buf, int c)
+{
+#ifdef USE_UTF8
+    return utf8_fromunicode(buf, c);
+#else
+    *buf = c;
+    return 1;
+#endif
+}
+
+/**
+ * Returns the unicode character at the given offset,
+ * or -1 if none.
+ */
+static int get_char(struct current *current, int pos)
+{
+    if (pos >= 0 && pos < current->chars) {
+        int c;
+        int i = utf8_index(current->buf, pos);
+        (void)utf8_tounicode(current->buf + i, &c);
+        return c;
+    }
+    return -1;
+}
+
+static void refreshLine(const char *prompt, struct current *current)
+{
+    int plen;
+    int pchars;
+    int backup = 0;
+    int i;
+    const char *buf = current->buf;
+    int chars = current->chars;
+    int pos = current->pos;
+    int b;
+    int ch;
+    int n;
+
+    /* Should intercept SIGWINCH. For now, just get the size every time */
+    getWindowSize(current);
+
+    plen = strlen(prompt);
+    pchars = utf8_strlen(prompt, plen);
+
+    /* Account for a line which is too long to fit in the window.
+     * Note that control chars require an extra column
+     */
+
+    /* How many cols are required to the left of 'pos'?
+     * The prompt, plus one extra for each control char
+     */
+    n = pchars + utf8_strlen(buf, current->len);
+    b = 0;
+    for (i = 0; i < pos; i++) {
+        b += utf8_tounicode(buf + b, &ch);
+        if (ch < ' ') {
+            n++;
+        }
+    }
+
+    /* If too many are need, strip chars off the front of 'buf'
+     * until it fits. Note that if the current char is a control character,
+     * we need one extra col.
+     */
+    if (current->pos < current->chars && get_char(current, current->pos) < ' ') {
+        n++;
+    }
+
+    while (n >= current->cols) {
+        b = utf8_tounicode(buf, &ch);
+        if (ch < ' ') {
+            n--;
+        }
+        n--;
+        buf += b;
+        pos--;
+        chars--;
+    }
+
+    /* Cursor to left edge, then the prompt */
+    cursorToLeft(current);
+    outputChars(current, prompt, plen);
+
+    /* Now the current buffer content */
+
+    /* Need special handling for control characters.
+     * If we hit 'cols', stop.
+     */
+    b = 0; /* unwritted bytes */
+    n = 0; /* How many control chars were written */
+    for (i = 0; i < chars; i++) {
+        int ch;
+        int w = utf8_tounicode(buf + b, &ch);
+        if (ch < ' ') {
+            n++;
+        }
+        if (pchars + i + n >= current->cols) {
+            break;
+        }
+        if (ch < ' ') {
+            /* A control character, so write the buffer so far */
+            outputChars(current, buf, b);
+            buf += b + w;
+            b = 0;
+            outputControlChar(current, ch + '@');
+            if (i < pos) {
+                backup++;
+            }
+        }
+        else {
+            b += w;
+        }
+    }
+    outputChars(current, buf, b);
+
+    /* Erase to right, move cursor to original position */
+    eraseEol(current);
+    setCursorPos(current, pos + pchars + backup);
+}
+
+static void set_current(struct current *current, const char *str)
+{
+    strncpy(current->buf, str, current->bufmax);
+    current->buf[current->bufmax - 1] = 0;
+    current->len = strlen(current->buf);
+    current->pos = current->chars = utf8_strlen(current->buf, current->len);
+}
+
+static int has_room(struct current *current, int bytes)
+{
+    return current->len + bytes < current->bufmax - 1;
+}
+
+/**
+ * Removes the char at 'pos'.
+ *
+ * Returns 1 if the line needs to be refreshed, 2 if not
+ * and 0 if nothing was removed
+ */
+static int remove_char(struct current *current, int pos)
+{
+    if (pos >= 0 && pos < current->chars) {
+        int p1, p2;
+        int ret = 1;
+        p1 = utf8_index(current->buf, pos);
+        p2 = p1 + utf8_index(current->buf + p1, 1);
+
+        /* optimise remove char in the case of removing the last char */
+        if (current->pos == pos + 1 && current->pos == current->chars) {
+            if (current->buf[pos] >= ' ' && utf8_strlen(current->prompt, -1) + utf8_strlen(current->buf, current->len) < current->cols - 1) {
+                ret = 2;
+                fd_printf(current->fd, "\b \b");
+            }
+        }
+
+        /* Move the null char too */
+        memmove(current->buf + p1, current->buf + p2, current->len - p2 + 1);
+        current->len -= (p2 - p1);
+        current->chars--;
+
+        if (current->pos > pos) {
+            current->pos--;
+        }
+        return ret;
+    }
+    return 0;
+}
+
+/**
+ * Insert 'ch' at position 'pos'
+ *
+ * Returns 1 if the line needs to be refreshed, 2 if not
+ * and 0 if nothing was inserted (no room)
+ */
+static int insert_char(struct current *current, int pos, int ch)
+{
+    char buf[3];
+    int n = utf8_getchars(buf, ch);
+
+    if (has_room(current, n) && pos >= 0 && pos <= current->chars) {
+        int p1, p2;
+        int ret = 1;
+        p1 = utf8_index(current->buf, pos);
+        p2 = p1 + n;
+
+        /* optimise the case where adding a single char to the end and no scrolling is needed */
+        if (current->pos == pos && current->chars == pos) {
+            if (ch >= ' ' && utf8_strlen(current->prompt, -1) + utf8_strlen(current->buf, current->len) < current->cols - 1) {
+                IGNORE_RC(write(current->fd, buf, n));
+                ret = 2;
+            }
+        }
+
+        memmove(current->buf + p2, current->buf + p1, current->len - p1);
+        memcpy(current->buf + p1, buf, n);
+        current->len += n;
+
+        current->chars++;
+        if (current->pos >= pos) {
+            current->pos++;
+        }
+        return ret;
+    }
+    return 0;
+}
+
+/**
+ * Returns 0 if no chars were removed or non-zero otherwise.
+ */
+static int remove_chars(struct current *current, int pos, int n)
+{
+    int removed = 0;
+    while (n-- && remove_char(current, pos)) {
+        removed++;
+    }
+    return removed;
+}
+
+#ifndef NO_COMPLETION
+static linenoiseCompletionCallback *completionCallback = NULL;
+
+static void beep() {
+    fprintf(stderr, "\x7");
+    fflush(stderr);
+}
+
+static void freeCompletions(linenoiseCompletions *lc) {
+    size_t i;
+    for (i = 0; i < lc->len; i++)
+        free(lc->cvec[i]);
+    free(lc->cvec);
+}
+
+static int completeLine(struct current *current) {
+    linenoiseCompletions lc = { 0, NULL };
+    int c = 0;
+
+    completionCallback(current->buf,&lc);
+    if (lc.len == 0) {
+        beep();
+    } else {
+        size_t stop = 0, i = 0;
+
+        while(!stop) {
+            /* Show completion or original buffer */
+            if (i < lc.len) {
+                struct current tmp = *current;
+                tmp.buf = lc.cvec[i];
+                tmp.pos = tmp.len = strlen(tmp.buf);
+                tmp.chars = utf8_strlen(tmp.buf, tmp.len);
+                refreshLine(current->prompt, &tmp);
+            } else {
+                refreshLine(current->prompt, current);
+            }
+
+            c = fd_read(current);
+            if (c == -1) {
+                break;
+            }
+
+            switch(c) {
+                case '\t': /* tab */
+                    i = (i+1) % (lc.len+1);
+                    if (i == lc.len) beep();
+                    break;
+                case 27: /* escape */
+                    /* Re-show original buffer */
+                    if (i < lc.len) {
+                        refreshLine(current->prompt, current);
+                    }
+                    stop = 1;
+                    break;
+                default:
+                    /* Update buffer and return */
+                    if (i < lc.len) {
+                        set_current(current,lc.cvec[i]);
+                    }
+                    stop = 1;
+                    break;
+            }
+        }
+    }
+
+    freeCompletions(&lc);
+    return c; /* Return last read character */
+}
+
+/* Register a callback function to be called for tab-completion. */
+void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn) {
+    completionCallback = fn;
+}
+
+void linenoiseAddCompletion(linenoiseCompletions *lc, const char *str) {
+    lc->cvec = (char **)realloc(lc->cvec,sizeof(char*)*(lc->len+1));
+    lc->cvec[lc->len++] = strdup(str);
+}
+
+#endif
 
 static int linenoisePrompt(struct current *current) {
     int history_index = 0;
@@ -707,7 +757,8 @@ static int linenoisePrompt(struct current *current) {
     refreshLine(current->prompt, current);
 
     while(1) {
-        int c = fd_read(current->fd);
+        int dir = -1;
+        int c = fd_read(current);
 
 #ifndef NO_COMPLETION
         /* Only autocomplete when the callback is set. It returns < 0 when
@@ -724,6 +775,9 @@ static int linenoisePrompt(struct current *current) {
 
 process_char:
         if (c == -1) return current->len;
+        if (c == 27) {   /* escape sequence */
+            c = check_special(current->fd);
+        }
         switch(c) {
         case '\r':    /* enter */
             history_len--;
@@ -786,7 +840,7 @@ process_char:
 
                     snprintf(rprompt, sizeof(rprompt), "(reverse-i-search)'%s': ", rbuf);
                     refreshLine(rprompt, current);
-                    c = fd_read(current->fd);
+                    c = fd_read(current);
                     if (c == ctrl('H') || c == 127) {
                         if (rchars) {
                             int p = utf8_index(rbuf, --rchars);
@@ -881,7 +935,7 @@ process_char:
                 if (insert_char(current, current->pos, c)) {
                     refreshLine(current->prompt, current);
                     /* Now wait for the next char. Can insert anything except \0 */
-                    c = fd_read(current->fd);
+                    c = fd_read(current);
 
                     /* Remove the ^V first */
                     remove_char(current, current->pos - 1);
@@ -893,69 +947,56 @@ process_char:
                 }
             }
             break;
-        case ctrl('B'):     /* ctrl-b */
-        case ctrl('F'):     /* ctrl-f */
-        case ctrl('P'):    /* ctrl-p */
-        case ctrl('N'):    /* ctrl-n */
-        case 27: {   /* escape sequence */
-            int dir = -1;
-            if (c == 27) {
-                c = check_special(current->fd);
+        case ctrl('B'):
+        case SPECIAL_LEFT:
+            if (current->pos > 0) {
+                current->pos--;
+                refreshLine(current->prompt, current);
             }
-            switch (c) {
-                case ctrl('B'):
-                case SPECIAL_LEFT:
-                    if (current->pos > 0) {
-                        current->pos--;
-                        refreshLine(current->prompt, current);
-                    }
+            break;
+        case ctrl('F'):
+        case SPECIAL_RIGHT:
+            if (current->pos < current->chars) {
+                current->pos++;
+                refreshLine(current->prompt, current);
+            }
+            break;
+        case ctrl('P'):
+        case SPECIAL_UP:
+            dir = 1;
+        case ctrl('N'):
+        case SPECIAL_DOWN:
+            if (history_len > 1) {
+                /* Update the current history entry before to
+                 * overwrite it with tne next one. */
+                free(history[history_len-1-history_index]);
+                history[history_len-1-history_index] = strdup(current->buf);
+                /* Show the new entry */
+                history_index += dir;
+                if (history_index < 0) {
+                    history_index = 0;
                     break;
-                case ctrl('F'):
-                case SPECIAL_RIGHT:
-                    if (current->pos < current->chars) {
-                        current->pos++;
-                        refreshLine(current->prompt, current);
-                    }
+                } else if (history_index >= history_len) {
+                    history_index = history_len-1;
                     break;
-                case ctrl('P'):
-                case SPECIAL_UP:
-                    dir = 1;
-                case ctrl('N'):
-                case SPECIAL_DOWN:
-                    if (history_len > 1) {
-                        /* Update the current history entry before to
-                         * overwrite it with tne next one. */
-                        free(history[history_len-1-history_index]);
-                        history[history_len-1-history_index] = strdup(current->buf);
-                        /* Show the new entry */
-                        history_index += dir;
-                        if (history_index < 0) {
-                            history_index = 0;
-                            break;
-                        } else if (history_index >= history_len) {
-                            history_index = history_len-1;
-                            break;
-                        }
-                        set_current(current, history[history_len-1-history_index]);
-                        refreshLine(current->prompt, current);
-                    }
-                    break;
+                }
+                set_current(current, history[history_len-1-history_index]);
+                refreshLine(current->prompt, current);
+            }
+            break;
 
-                case SPECIAL_DELETE:
-                    if (remove_char(current, current->pos) == 1) {
-                        refreshLine(current->prompt, current);
-                    }
-                    break;
-                case SPECIAL_HOME:
-                    current->pos = 0;
-                    refreshLine(current->prompt, current);
-                    break;
-                case SPECIAL_END:
-                    current->pos = current->chars;
-                    refreshLine(current->prompt, current);
-                    break;
+        case SPECIAL_DELETE:
+            if (remove_char(current, current->pos) == 1) {
+                refreshLine(current->prompt, current);
             }
-            }
+            break;
+        case SPECIAL_HOME:
+            current->pos = 0;
+            refreshLine(current->prompt, current);
+            break;
+        case SPECIAL_END:
+            current->pos = current->chars;
+            refreshLine(current->prompt, current);
             break;
         default:
 	    if (characterCallback[(int)c]) {
@@ -995,7 +1036,7 @@ process_char:
             break;
         case ctrl('L'): /* Ctrl+L, clear screen */
             /* clear screen */
-            fd_printf(current->fd, "\x1b[H\x1b[2J");
+            clearScreen(current);
             /* Force recalc of window size for serial terminals */
             current->cols = 0;
             refreshLine(current->prompt, current);
@@ -1005,64 +1046,41 @@ process_char:
     return current->len;
 }
 
-static int linenoiseRaw(char *buf, size_t buflen, const char *prompt) {
-    int fd = STDIN_FILENO;
+char *linenoise(const char *prompt)
+{
     int count;
+    struct current current;
+    char buf[LINENOISE_MAX_LINE];
 
-    if (buflen == 0) {
-        errno = EINVAL;
-        return -1;
-    }
-    if (!isatty(STDIN_FILENO)) {
-        if (fgets(buf, buflen, stdin) == NULL) return -1;
+    if (enableRawMode(&current) == -1) {
+	printf("%s", prompt);
+        fflush(stdout);
+        if (fgets(buf, sizeof(buf), stdin) == NULL) {
+		return NULL;
+        }
         count = strlen(buf);
         if (count && buf[count-1] == '\n') {
             count--;
             buf[count] = '\0';
         }
-    } else {
-        struct current current;
-
-        if (enableRawMode(fd) == -1) return -1;
-
-        current.fd = fd;
+    }
+    else
+    {
         current.buf = buf;
-        current.bufmax = buflen;
+        current.bufmax = sizeof(buf);
         current.len = 0;
         current.chars = 0;
         current.pos = 0;
-        current.cols = 0;
         current.prompt = prompt;
 
         count = linenoisePrompt(&current);
-        disableRawMode(fd);
-
+        disableRawMode(&current);
         printf("\n");
-    }
-    return count;
-}
-
-char *linenoise(const char *prompt) {
-    char buf[LINENOISE_MAX_LINE];
-    int count;
-
-    if (isUnsupportedTerm()) {
-        size_t len;
-
-        printf("%s",prompt);
-        fflush(stdout);
-        if (fgets(buf,LINENOISE_MAX_LINE,stdin) == NULL) return NULL;
-        len = strlen(buf);
-        while(len && (buf[len-1] == '\n' || buf[len-1] == '\r')) {
-            len--;
-            buf[len] = '\0';
+        if (count == -1) {
+            return NULL;
         }
-        return strdup(buf);
-    } else {
-        count = linenoiseRaw(buf,LINENOISE_MAX_LINE,prompt);
-        if (count == -1) return NULL;
-        return strdup(buf);
     }
+    return strdup(buf);
 }
 
 /* Register a callback function to be called when a character is pressed */
@@ -1078,7 +1096,7 @@ int linenoiseHistoryAdd(const char *line) {
 
     if (history_max_len == 0) return 0;
     if (history == NULL) {
-        history = (char**)malloc(sizeof(char*)*history_max_len);
+        history = (char **)malloc(sizeof(char*)*history_max_len);
         if (history == NULL) return 0;
         memset(history,0,(sizeof(char*)*history_max_len));
     }
@@ -1101,7 +1119,7 @@ int linenoiseHistorySetMaxLen(int len) {
     if (history) {
         int tocopy = history_len;
 
-        newHistory = (char**)malloc(sizeof(char*)*len);
+        newHistory = (char **)malloc(sizeof(char*)*len);
         if (newHistory == NULL) return 0;
         if (len < tocopy) tocopy = len;
         memcpy(newHistory,history+(history_max_len-tocopy), sizeof(char*)*tocopy);
