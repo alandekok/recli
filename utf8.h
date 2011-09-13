@@ -13,7 +13,7 @@
 
 /* No utf-8 support. 1 byte = 1 char */
 #define utf8_strlen(S, B) (B) < 0 ? (int)strlen(S) : (B)
-#define utf8_tounicode(S, CP) (*(CP) = *(S), 1)
+#define utf8_tounicode(S, CP) (*(CP) = (unsigned char)*(S), 1)
 #define utf8_index(C, I) (I)
 #define utf8_charlen(C) 1
 
