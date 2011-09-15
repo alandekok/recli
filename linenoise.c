@@ -3,7 +3,8 @@
  *
  * You can find the latest source code at:
  *
- *   http://github.com/antirez/linenoise
+ *   http://github.com/msteveb/linenoise
+ *   (forked from http://github.com/antirez/linenoise)
  *
  * Does a number of crazy assumptions that happen to be true in 99.9999% of
  * the 2010 UNIX computers around.
@@ -12,6 +13,7 @@
  *
  * Copyright (c) 2010, Salvatore Sanfilippo <antirez at gmail dot com>
  * Copyright (c) 2010, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+ * Copyright (c) 2011, Steve Bennett <steveb at workware dot net dot au>
  *
  * All rights reserved.
  *
@@ -44,13 +46,11 @@
  * - http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
  * - http://www.3waylabs.com/nw/WWW/products/wizcon/vt220.html
  *
- * Todo list:
- * - Win32 support
- * - Save and load history containing newlines
- *
  * Bloat:
  * - Completion?
  *
+ * Unix/termios
+ * ------------
  * List of escape sequences used by this program, we do everything just
  * a few sequences. In order to be so cheap we may have some
  * flickering effect with some slow terminal, but the lesser sequences
@@ -94,6 +94,12 @@
  * DSR/CPR (Report cursor position)
  *    Sequence: ESC [ 6 n
  *    Effect: reports current cursor position as ESC [ NNN ; MMM R
+ *
+ * win32/console
+ * -------------
+ * If __MINGW32__ is defined, the win32 console API is used.
+ * This could probably be made to work for the msvc compiler too.
+ * This support based in part on work by Jon Griffiths.
  */
 
 #ifdef __MINGW32__
