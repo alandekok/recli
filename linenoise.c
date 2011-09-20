@@ -232,7 +232,7 @@ static int completeLine(int fd, const char *prompt, char *buf, size_t buflen, si
     int nread, nwritten;
     char c = 0;
 
-    completionCallback(buf,&lc);
+    completionCallback(buf,*len,&lc);
     if (lc.len == 0) {
         beep();
     } else {
