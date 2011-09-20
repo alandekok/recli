@@ -11,6 +11,10 @@ void completion(const char *buf, size_t len, linenoiseCompletions *lc) {
 }
 
 int foundspace(const char *buf, size_t len, char c) {
+  if (len == 0) return 1;
+
+  if (buf[len -1] == c) return 1;
+
   printf("\r\nSPACE!\r\n");
   return 0;
 }
