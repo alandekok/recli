@@ -54,6 +54,13 @@ int foundquote(const char *buf, size_t len, char c) {
     return 0;
 }
 
+int foundhelp(const char *buf, size_t len, char c) {
+    if (in_string) return 0;
+
+    printf("\r\nHELP!\r\n");
+    return 1;
+}
+
 int main(void) {
     char *line;
 
@@ -62,6 +69,7 @@ int main(void) {
     linenoiseSetCharacterCallback(foundspace, ' ');
     linenoiseSetCharacterCallback(foundquote, '"');
     linenoiseSetCharacterCallback(foundquote, '\'');
+    linenoiseSetCharacterCallback(foundhelp, '?');
 
     while((line = linenoise("hello> ")) != NULL) {
         if (line[0] != '\0') {
