@@ -101,6 +101,7 @@
 #define LINENOISE_MAX_LINE 4096
 static char *unsupported_term[] = {"dumb","cons25",NULL};
 static linenoiseCompletionCallback *completionCallback = NULL;
+static linenoiseCharacterCallback *characterCallback[256] = { NULL };
 
 static struct termios orig_termios; /* in order to restore at exit */
 static int rawmode = 0; /* for atexit() function to check if restore is needed*/
@@ -424,6 +425,16 @@ up_down_arrow:
             }
             break;
         default:
+	    if (characterCallback[(int)c]) {
+	       int rcode;
+
+	       rcode = characterCallback[(int)c](buf,len,c);
+	       refreshLine(fd,prompt,buf,len,pos,cols);
+	       if (rcode == 1) {
+		   continue;
+		}
+	    }
+
             if (len < buflen) {
                 if (len == pos) {
                     buf[pos] = c;
@@ -523,6 +534,13 @@ char *linenoise(const char *prompt) {
 /* Register a callback function to be called for tab-completion. */
 void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn) {
     completionCallback = fn;
+}
+
+/* Register a callback function to be called when a character is pressed */
+void linenoiseSetCharacterCallback(linenoiseCharacterCallback *fn, char c) {
+    if (c < ' ') return;
+
+    characterCallback[(int)c] = fn;
 }
 
 void linenoiseAddCompletion(linenoiseCompletions *lc, char *str) {

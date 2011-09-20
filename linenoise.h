@@ -46,6 +46,10 @@ typedef void(linenoiseCompletionCallback)(const char *, linenoiseCompletions *);
 void linenoiseSetCompletionCallback(linenoiseCompletionCallback *);
 void linenoiseAddCompletion(linenoiseCompletions *, char *);
 
+typedef int(linenoiseCharacterCallback)(const char *, size_t, char);
+void linenoiseSetCompletionCallback(linenoiseCompletionCallback *);
+void linenoiseSetCharacterCallback(linenoiseCharacterCallback *, char);
+
 char *linenoise(const char *prompt);
 int linenoiseHistoryAdd(const char *line);
 int linenoiseHistorySetMaxLen(int len);

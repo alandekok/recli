@@ -10,11 +10,18 @@ void completion(const char *buf, linenoiseCompletions *lc) {
     }
 }
 
+int foundspace(const char *buf, size_t len, char c) {
+  printf("\r\nSPACE!\r\n");
+  return 0;
+}
+
 int main(void) {
     char *line;
 
     linenoiseSetCompletionCallback(completion);
     linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
+    linenoiseSetCharacterCallback(foundspace, ' ');
+
     while((line = linenoise("hello> ")) != NULL) {
         if (line[0] != '\0') {
             printf("echo: '%s'\n", line);
