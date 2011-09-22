@@ -59,7 +59,10 @@ int foundquote(const char *buf, size_t len, char c) {
 int foundhelp(const char *buf, size_t len, char c) {
     if (in_string) return 0;
 
-    printf("\r\nHELP!\r\n");
+    len = len;			/* -Wunused */
+    c = c;			/* -Wunused */
+
+    printf("?\r\nHELP: %s\r\n", buf);
     return 1;
 }
 
