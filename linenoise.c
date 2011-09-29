@@ -465,16 +465,22 @@ static int check_special(int fd)
                 return SPECIAL_HOME;
         }
     }
-    if (c == '[' && c2 >= '1' && c2 <= '6') {
+    if (c == '[' && c2 >= '1' && c2 <= '8') {
         /* extended escape */
-        int c3 = fd_read_char(fd, 50);
-        if (c2 == '3' && c3 == '~') {
-            /* delete char under cursor */
-            return SPECIAL_DELETE;
+        c = fd_read_char(fd, 50);
+        if (c == '~') {
+            switch (c2) {
+                case '3':
+                    return SPECIAL_DELETE;
+                case '7':
+                    return SPECIAL_HOME;
+                case '8':
+                    return SPECIAL_END;
+            }
         }
-        while (c3 != -1 && c3 != '~') {
+        while (c != -1 && c != '~') {
             /* .e.g \e[12~ or '\e[11;2~   discard the complete sequence */
-            c3 = fd_read_char(fd, 50);
+            c = fd_read_char(fd, 50);
         }
     }
 
