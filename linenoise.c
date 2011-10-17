@@ -525,7 +525,9 @@ static void cursorToLeft(struct current *current)
 static int outputChars(struct current *current, const char *buf, int len)
 {
     COORD pos = { current->x, current->y };
-    WriteConsoleOutputCharacter(current->outh, buf, len, pos, 0);
+    DWORD n;
+	
+    WriteConsoleOutputCharacter(current->outh, buf, len, pos, &n);
     current->x += len;
     return 0;
 }
