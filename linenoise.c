@@ -995,8 +995,9 @@ process_char:
                 free(history[history_len]);
                 return -1;
             }
-            /* Otherwise delete char to right of cursor */
-            if (remove_char(current, current->pos)) {
+            /* Otherwise fall through to delete char to right of cursor */
+        case SPECIAL_DELETE:
+            if (remove_char(current, current->pos) == 1) {
                 refreshLine(current->prompt, current);
             }
             break;
@@ -1182,37 +1183,15 @@ process_char:
                 refreshLine(current->prompt, current);
             }
             break;
-
-        case SPECIAL_DELETE:
-            if (remove_char(current, current->pos) == 1) {
-                refreshLine(current->prompt, current);
-            }
-            break;
+        case ctrl('A'): /* Ctrl+a, go to the start of the line */
         case SPECIAL_HOME:
             current->pos = 0;
             refreshLine(current->prompt, current);
             break;
+        case ctrl('E'): /* ctrl+e, go to the end of the line */
         case SPECIAL_END:
             current->pos = current->chars;
             refreshLine(current->prompt, current);
-            break;
-        default:
-	    if (characterCallback[(int)c]) {
-	       int rcode;
-
-	       rcode = characterCallback[(int)c](current->buf,current->len,c);
-	       refreshLine(current->prompt, current);
-	       if (rcode == 1) {
-		   continue;
-		}
-	    }
-
-            /* Only tab is allowed without ^V */
-            if (c == '\t' || c >= ' ') {
-                if (insert_char(current, current->pos, c) == 1) {
-                    refreshLine(current->prompt, current);
-                }
-            }
             break;
         case ctrl('U'): /* Ctrl+u, delete to beginning of line. */
             if (remove_chars(current, 0, current->pos)) {
@@ -1224,20 +1203,19 @@ process_char:
                 refreshLine(current->prompt, current);
             }
             break;
-        case ctrl('A'): /* Ctrl+a, go to the start of the line */
-            current->pos = 0;
-            refreshLine(current->prompt, current);
-            break;
-        case ctrl('E'): /* ctrl+e, go to the end of the line */
-            current->pos = current->chars;
-            refreshLine(current->prompt, current);
-            break;
         case ctrl('L'): /* Ctrl+L, clear screen */
-            /* clear screen */
             clearScreen(current);
             /* Force recalc of window size for serial terminals */
             current->cols = 0;
             refreshLine(current->prompt, current);
+            break;
+        default:
+            /* Only tab is allowed without ^V */
+            if (c == '\t' || c >= ' ') {
+                if (insert_char(current, current->pos, c) == 1) {
+                    refreshLine(current->prompt, current);
+                }
+            }
             break;
         }
     }
