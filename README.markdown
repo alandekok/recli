@@ -35,6 +35,8 @@ anything else with the input unless you tell it to.
 
  * Recli has predefined data types, which are easily extensible.  It includes support for INTEGER, IPADDR, STRING, and a number of other common data types.  See DATATYPES.markdown.
 
+ * Partial commands can be entered.  When that happens, the prompt changes to indicate that more text is expected.  The final part of the command can be entered by itself.  This is useful when you need to entry a number of similar, but long commands.  Just enter the common prefix once, and then the unique trailing portions.
+
  * When '-r dir' is passed as a command-line option, Recli will look for a program to run, and pass the command-line arguments to it.  It treats each word in the input as a directory or file.  It looks for an executable in the given directory, and runs it with the passed parameters.  Entering "foo bar baz" will cause it to look for an executable "dir/foo/bar/baz".  If the file "bar" is an executable, then it is executed, with command-line argument "baz".
 
 ## To Do List

@@ -25,8 +25,6 @@ static int ctx2argv(char *buf, size_t len, int max_argc, char *argv[])
 	memcpy(ctx_mybuf, ctx_buffer, ctx_buflen);
 	memcpy(ctx_mybuf + ctx_buflen, buf, len + 1);
 
-	fprintf(stderr, "WHOLE LINE : ::%s::\n", ctx_mybuf);
-
 	return str2argv(ctx_mybuf, ctx_buflen + len, max_argc, argv);
 }
 
@@ -188,7 +186,8 @@ static const char *spaces = "                                                   
 int main(int argc, char **argv)
 {
 	int c, my_argc;
-	const char *prompt = "cli> ";
+	const char *baseprompt = "recli> ";
+	const char *prompt = baseprompt;
 	const char *rundir = NULL;
 	int quit = 0;
 	int context = 1;
@@ -228,7 +227,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'P':
-			prompt = optarg;
+			baseprompt = prompt = optarg;
 			break;
 		    
 		case 'X':
@@ -246,7 +245,7 @@ int main(int argc, char **argv)
 	argv += (optind - 1);
 
 	if (!isatty(STDIN_FILENO)) {
-		prompt = "";
+		baseprompt = prompt = "";
 		context = 0;
 		tty = 0;
 	}
@@ -260,13 +259,21 @@ int main(int argc, char **argv)
 		if (line[0] != '\0') {
 			size_t mylen = strlen(line);
 
+			if (context && (strcmp(line, "end") == 0)) {
+				ctx_buflen = 0;
+				ctx_buffer[0] = '\0';
+				prompt = baseprompt;
+				goto next_line;
+			}
+
 			memcpy(mybuf, line, mylen + 1);
 
 			my_argc = ctx2argv(mybuf, mylen, 128, my_argv);
 			if (my_argc < 0) {
 				c = -1;
+
 			} else {
-			  c = syntax_check(syntax, my_argc, my_argv, &fail);
+				c = syntax_check(syntax, my_argc, my_argv, &fail);
 				if ((c == 0) && !context) c = -1;
 				
 				if (c == 0) {
@@ -274,7 +281,7 @@ int main(int argc, char **argv)
 					ctx_buflen = strlen(ctx_buffer);
 					ctx_buffer[ctx_buflen] = ' ';
 					ctx_buflen++;
-					prompt = "cli ...> ";
+					prompt = "recli ...> ";
 					goto next_line;
 				}
 
@@ -311,7 +318,7 @@ int main(int argc, char **argv)
 				goto add_line;
 			}
 
-			printf("%s\n", line);
+			printf("%s%s\n", ctx_buffer, line);
 
 		add_line:
 			linenoiseHistoryAdd(line);
