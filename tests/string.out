@@ -1,0 +1,9 @@
+str "foo bar baz"
+str foo
+str "foo
+^ - Invalid input
+str foo"
+^ - Invalid input
+str "foo \" bar"
+str foo bar
+^ - Invalid input

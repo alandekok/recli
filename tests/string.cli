@@ -1,0 +1,6 @@
+str "foo bar baz"
+str foo
+str "foo
+str foo"
+str "foo \" bar"
+str foo bar

@@ -15,7 +15,7 @@
  * Copyright (c) 2010, Salvatore Sanfilippo <antirez at gmail dot com>
  * Copyright (c) 2010, Pieter Noordhuis <pcnoordhuis at gmail dot com>
  * Copyright (c) 2011, Steve Bennett <steveb at workware dot net dot au>
- * Copyright (c) 2011, Alan DeKok <steveb at freeradius dot org>
+ * Copyright (c) 2011, Alan DeKok <aland at freeradius dot org>
  *
  * All rights reserved.
  *

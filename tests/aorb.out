@@ -1,0 +1,12 @@
+a
+b
+hello
+^ - Invalid input
+hello a
+hello b
+c hello
+d hello
+c
+^ - Invalid input
+d
+^ - Invalid input

@@ -1,0 +1,10 @@
+ip 1.2.3.4
+ip 0.1.2.3
+ip -3.3
+   ^ - Invalid input
+ip xyz
+   ^ - Invalid input
+ip 333.0.1.2
+   ^ - Invalid input
+ip 1.2.3.3a
+   ^ - Invalid input

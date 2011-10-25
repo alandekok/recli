@@ -1,0 +1,10 @@
+int 1
+int -1
+int -2.3
+    ^ - Invalid input
+int 0x44
+    ^ - Invalid input
+int 0334
+int "hello"
+    ^ - Invalid input
+int 484747
