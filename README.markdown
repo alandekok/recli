@@ -31,7 +31,7 @@ anything else with the input unless you tell it to.
 
  * Customizable help text is documented in HELP.markdown.  Recli can load contextual help text, and display it when the user types '?'.  If no help text is defined, the closest matching syntax is printed.
 
- * Recli supports tab completion for syntaxes.  Pressing <TAB> will result in it switching between the various options.  The tab completion is based on the Linenoise functionality, and may not match exactly what you expect from readline.
+ * Recli supports tab completion for syntaxes.  Pressing TAB will result in it switching between the various options.  The tab completion is based on the Linenoise functionality, and may not match exactly what you expect from readline.
 
  * Recli has predefined data types, which are easily extensible.  It includes support for INTEGER, IPADDR, STRING, and a number of other common data types.  See DATATYPES.markdown.
 
