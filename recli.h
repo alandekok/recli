@@ -18,7 +18,7 @@ extern void syntax_free(cli_syntax_t *);
 typedef int (*cli_syntax_parse_t)(const char *);
 
 extern int syntax_parse(const char *buffer, cli_syntax_t **out);
-extern int syntax_parse_add(char *name, cli_syntax_parse_t callback);
+extern int syntax_parse_add(const char *name, cli_syntax_parse_t callback);
 extern int syntax_check(cli_syntax_t *syntax, int argc, char *argv[],
 			const char **fail);
 extern cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[]);

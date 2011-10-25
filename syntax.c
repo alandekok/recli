@@ -37,6 +37,10 @@
 #include <assert.h>
 #include "recli.h"
 
+/*
+ *	This file implements an abstract syntax tree based on
+ *	content-addressible nodes.
+ */
 typedef enum cli_type_t {
 	CLI_TYPE_INVALID = 0,
 	CLI_TYPE_EXACT,
@@ -95,6 +99,11 @@ static cli_syntax_t *syntax_find(cli_syntax_t *this);
 static void syntax_debug(const char *msg, cli_syntax_t *this);
 #endif
 
+
+/*
+ *	Create a unique hash based on node contents.
+ *	This is the "content-addressible" part of the DB.
+ */
 static uint32_t syntax_hash(cli_syntax_t *this)
 {
 	uint32_t hash;
@@ -144,10 +153,18 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 }
 
 
+/*
+ *	For now, there is only one global hash table containing all
+ *	nodes.
+ */
 static int num_entries = 0;
 static int table_size = 0;
 static cli_syntax_t **hash_table = NULL;
 
+
+/*
+ *	Look up a node based on content.
+ */
 static cli_syntax_t *syntax_find(cli_syntax_t *this)
 {
 	cli_syntax_t *found;
@@ -166,6 +183,10 @@ static cli_syntax_t *syntax_find(cli_syntax_t *this)
 	return NULL;
 }
 
+
+/*
+ *	Increment the reference count, if the node exists.
+ */
 static cli_syntax_t *syntax_ref(cli_syntax_t *this)
 {
 	this = syntax_find(this);
@@ -175,7 +196,9 @@ static cli_syntax_t *syntax_ref(cli_syntax_t *this)
 	return this;
 }
 
-
+/*
+ *	Order nodes alphabetically.
+ */
 static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 {
 	while (a->type != CLI_TYPE_EXACT) a = a->first;
@@ -183,10 +206,18 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 
 	// FIXME: type optional && key
 
+	/*
+	 *	FIXME: if the first node of a concatenation is
+	 *	identical, recurse over the second one.
+	 */
+
 	return strcmp((char *)a->first, (char *) b->first);
 }
 
-
+/*
+ *	Free a node by decrementing its reference count.  When the
+ *	count goes to zero, free the node.
+ */
 void syntax_free(cli_syntax_t *this)
 {
 	int flag = 0;
@@ -295,6 +326,9 @@ finish:
 }
 
 
+/*
+ *	Insert a new node into the hash.
+ */
 static int syntax_insert(cli_syntax_t *this)
 {
 	int i;
@@ -380,6 +414,10 @@ static int syntax_prefix_length(cli_syntax_t *a, cli_syntax_t *b)
 	return a->length - b->length;
 }
 
+
+/*
+ *	Longest common suffix of two lists.
+ */
 static cli_syntax_t *syntax_lcs(cli_syntax_t *a, cli_syntax_t *b)
 {
 	cli_syntax_t *c;
@@ -431,6 +469,9 @@ redo:
 }
 
 
+/*
+ *	Longest common prefix of two lists.
+ */
 static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
 {
 	int lcp = 0;
@@ -560,6 +601,9 @@ static cli_syntax_t *syntax_new_alternate(cli_syntax_t *first,
 }
 
 
+/*
+ *	Skip "lcp" nodes of a prefix and return the suffix.
+ */
 static cli_syntax_t *syntax_skip(cli_syntax_t *a, int lcp)
 {
 redo:
@@ -608,6 +652,9 @@ static cli_syntax_t *syntax_concat_prefix(cli_syntax_t *prefix, int lcp,
 }
 
 
+/*
+ *	Create a new node, ensuring normal form.
+ */
 static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 {
 	int lcp;
@@ -871,6 +918,9 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 }
 
 
+/*
+ *	Internal "print syntax to string"
+ */
 static size_t syntax_sprintf(char *buffer, size_t len,
 			     const cli_syntax_t *this, cli_type_t parent)
 {
@@ -991,6 +1041,9 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 }
 
 
+/*
+ *	Print syntax to STDOUT
+ */
 void syntax_printf(const cli_syntax_t *this)
 {
 	if (!this) return;
@@ -1001,6 +1054,10 @@ void syntax_printf(const cli_syntax_t *this)
 	printf("%s", buffer);
 }
 
+
+/*
+ *	Print syntax, one alternation on each line.
+ */
 void syntax_print_lines(const cli_syntax_t *this)
 {
 	char buffer[1024];
@@ -1019,6 +1076,10 @@ void syntax_print_lines(const cli_syntax_t *this)
 	printf("%s\r\n", buffer);
 }
 
+
+/*
+ *	Handle error messages.
+ */
 static const char *syntax_error_string = NULL;
 static const char *syntax_error_ptr = NULL;
 
@@ -1028,6 +1089,9 @@ static void syntax_error(const char *p, const char *msg)
 	syntax_error_string = msg;
 }
 
+/*
+ *	Internal "parse string into syntax"
+ */
 static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 {
 	int rcode;
@@ -1323,7 +1387,9 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 	return 1;
 }
 
-
+/*
+ *	Parse a string to a syntax.
+ */
 int syntax_parse(const char *name, cli_syntax_t **out)
 {
 	const char *p = name;
@@ -1331,7 +1397,10 @@ int syntax_parse(const char *name, cli_syntax_t **out)
 	return str2syntax(&p, out, CLI_TYPE_EXACT);
 }
 
-int syntax_parse_add(char *name, cli_syntax_parse_t callback)
+/*
+ *	Add callbacks for a data type.
+ */
+int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
 {
 	size_t len;
 	cli_syntax_t *this, find;
@@ -1340,7 +1409,7 @@ int syntax_parse_add(char *name, cli_syntax_parse_t callback)
 
 	memset(&find, 0, sizeof(find));
 	find.type = CLI_TYPE_EXACT;
-	find.first = name;
+	find.first = (void *) name;
 	find.next = NULL;
 	this = syntax_find(&find);
 	if (this) return 0;
@@ -1435,6 +1504,9 @@ static int syntax_prefix_words(int argc, char *argv[],
 }
 
 
+/*
+ *	Walk over a syntax tree.
+ */
 #define CLI_WALK_PREORDER	(0)
 #define CLI_WALK_INORDER	(1)
 #define CLI_WALK_POSTORDER	(2)
@@ -1533,7 +1605,9 @@ static int syntax_walk(cli_syntax_t *this, int order, void *ctx,
 	return 0;
 }
 
-
+/*
+ *	Print raw syntax tree.
+ */
 static int syntax_print_pre(void *ctx, cli_syntax_t *this)
 {
 	ctx = ctx;		/* -Wunused */
@@ -1624,6 +1698,10 @@ static int syntax_print_post(void *ctx, cli_syntax_t *this)
 #define CLI_MATCH_EXACT   (0)
 #define CLI_MATCH_PREFIX  (1)
 
+
+/*
+ *	Match a word against a syntax tree.
+ */
 static int syntax_match_exact(const char *word, cli_syntax_t *this, int sense)
 {
 	if (this->next) {
@@ -1639,6 +1717,10 @@ static int syntax_match_exact(const char *word, cli_syntax_t *this, int sense)
 	return 1;
 }
 
+
+/*
+ *	Walk over a tree, matching argv[] to a tree.
+ */
 typedef struct cli_match_word_t {
 	int start_argc;
 	int argc;
@@ -1944,6 +2026,9 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 	return NULL;
 }
 				 
+/*
+ *	Return TRUE if the syntax accepts zero input.
+ */
 static int syntax_null_ok(const cli_syntax_t *this)
 {
 redo:
@@ -1976,6 +2061,9 @@ redo:
 }
 
 
+/*
+ *	Check argv against a syntax.
+ */
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 const char **fail)
 {
@@ -2012,6 +2100,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	return 1;
 }
+
 
 cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 {
@@ -2162,6 +2251,9 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 }
 
 
+/*
+ *	Parse a file into a syntax, ignoring blank lines and comments.
+ */
 int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 {
 	int lineno;
@@ -2243,6 +2335,10 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	return 0;
 }
 
+
+/*
+ *	Parse a simplified Markdown "help" file into a syntax.
+ */
 int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 {
 	int lineno, done;
@@ -2368,6 +2464,10 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 	return 0;
 }
 
+
+/*
+ *	Show help for a given argv[]
+ */
 const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
 {
 	int rcode;
