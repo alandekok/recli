@@ -1210,13 +1210,23 @@ process_char:
             refreshLine(current->prompt, current);
             break;
         default:
+	    if (characterCallback[(int)c]) { 
+              int rcode;
+
+              rcode = characterCallback[(int)c](current->buf,current->len,c);
+              refreshLine(current->prompt, current);
+              if (rcode == 1) {
+		continue;
+	      }
+	    }
+
             /* Only tab is allowed without ^V */
             if (c == '\t' || c >= ' ') {
                 if (insert_char(current, current->pos, c) == 1) {
                     refreshLine(current->prompt, current);
                 }
             }
-            break;
+	    break;
         }
     }
     return current->len;
