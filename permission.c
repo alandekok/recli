@@ -36,7 +36,7 @@
 #include <errno.h>
 #include "recli.h"
 
-typedef struct cli_permission_t {
+struct cli_permission_t {
 	int allowed;
 	int lineno;
 	int argc;
@@ -44,18 +44,16 @@ typedef struct cli_permission_t {
 
 	char *input_line;
 	const char *argv[1];
-} cli_permission_t;
+};
 
-static cli_permission_t *permissions = NULL;
-
-int permission_enforce(int argc, char *argv[])
+int permission_enforce(cli_permission_t *head, int argc, char *argv[])
 {
 	int i;
 	cli_permission_t *this;
 
-	if (!permissions || (argc == 0)) return 1;
+	if (!head || (argc == 0)) return 1;
 
-	for (this = permissions; this != NULL; this = this->next) {
+	for (this = head; this != NULL; this = this->next) {
 		int match = 1;
 
 		for (i = 0; i < this->argc; i++) {
@@ -124,12 +122,14 @@ static cli_permission_t *permission_parse_line(const char *buf)
 	return this;
 }
 
-int permission_parse_file(const char *filename)
+int permission_parse_file(const char *filename, cli_permission_t **phead)
 {
 	int lineno;
 	FILE *fp;
 	char buffer[1024];
-	cli_permission_t *this, **last;
+	cli_permission_t *head, *this, **last;
+
+	if (!filename || !phead) return -1;
 
 	fp = fopen(filename, "r");
 	if (!fp) {
@@ -138,7 +138,8 @@ int permission_parse_file(const char *filename)
 		return -1;
 	}
 
-	last = &permissions;
+	head = NULL;
+	last = &head;
 	lineno = 0;
 
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
@@ -159,20 +160,22 @@ int permission_parse_file(const char *filename)
 	}
 
 	fclose(fp);
+	*phead = head;
+
 	return 0;
 }
 
-void permission_free(void)
+void permission_free(cli_permission_t *head)
 {
 	cli_permission_t *this, *next;
 
-	for (this = permissions; this != NULL; this = next) {
+	if (!head) return;
+
+	for (this = head; this != NULL; this = next) {
 		next = this->next;
 
 		free(this->input_line);
 		memset(this, 0, sizeof(*this));
 		free(this);
 	}
-
-	permissions = NULL;
 }

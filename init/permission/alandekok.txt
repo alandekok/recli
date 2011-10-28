@@ -1,0 +1,4 @@
+# Not allowed to stop
+!stop
+
+# everything else is allowed

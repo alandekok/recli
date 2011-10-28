@@ -6,9 +6,11 @@ extern int str2argv(char *buf, size_t len, int max_argc, char *argv[]);
 extern void print_argv(int argc, char *argv[]);
 extern void print_argv_string(int argc, char *argv[]);
 
-extern int permission_enforce(int argc, char *argv[]);
-extern int permission_parse_file(const char *filename);
-extern void permission_free(void);
+typedef struct cli_permission_t cli_permission_t;
+
+extern int permission_enforce(cli_permission_t *head, int argc, char *argv[]);
+extern int permission_parse_file(const char *filename, cli_permission_t **result);
+extern void permission_free(cli_permission_t *head);
 
 typedef struct cli_syntax_t cli_syntax_t;
 
@@ -45,6 +47,7 @@ typedef struct recli_config_t {
 	const char *banner;
 	cli_syntax_t *syntax;
 	cli_syntax_t *help;
+	cli_permission_t *permissions;
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);

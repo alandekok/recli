@@ -36,6 +36,11 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <assert.h>
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+
 #include "recli.h"
 
 int recli_bootstrap(recli_config_t *config)
@@ -79,6 +84,23 @@ int recli_bootstrap(recli_config_t *config)
 		}
 
 		fclose(fp);
+	}
+
+	if (!config->permissions) {
+		char *name = NULL;
+		struct passwd *pwd;
+
+		pwd = getpwuid(getuid());
+		if (pwd) name = pwd->pw_name;
+
+		if (name) {
+			snprintf(buffer, sizeof(buffer), "%s/permission/%s.txt",
+				 config->dir, name);
+			if ((stat(buffer, &statbuf) >= 0) &&
+			    (permission_parse_file(buffer, &config->permissions) < 0)) {
+				return -1;
+			}
+		} /* else ignore any permissions */
 	}
 
 	return 0;

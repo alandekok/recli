@@ -15,7 +15,8 @@ static recli_config_t config = {
 	.prompt = "recli> ",
 	.banner = NULL,
 	.syntax = NULL,
-	.help = NULL
+	.help = NULL,
+	.permissions = NULL
 };
 static size_t ctx_buflen = 0;
 static char ctx_buffer[1024];
@@ -269,7 +270,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'p':
-			if (permission_parse_file(optarg) < 0) exit(1);
+			if (permission_parse_file(optarg, &config.permissions) < 0) exit(1);
 			break;
 
 		case 'q':
@@ -389,7 +390,7 @@ int main(int argc, char **argv)
 				goto add_line;
 			}
 
-			if (!permission_enforce(my_argc, my_argv)) {
+			if (!permission_enforce(config.permissions, my_argc, my_argv)) {
 				fprintf(stderr, "%s\n", line);
 				fprintf(stderr, "^ - No permission\n");
 				runit = 0;
@@ -411,6 +412,8 @@ int main(int argc, char **argv)
 done:
 	if (config.help) syntax_free(config.help);
 	syntax_free(config.syntax);
+	permission_free(config.permissions);
+
 	syntax_free(NULL);
 
 	return 0;
