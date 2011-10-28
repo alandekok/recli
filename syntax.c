@@ -2143,7 +2143,10 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 		match++;
 	}
 
-	if (match == 0) return NULL;
+	if (match == 0) {
+		syntax_free(this);
+		return NULL;
+	}
 
 	next = this;
 	for (i = match - 1; i >= 0; i--) {
