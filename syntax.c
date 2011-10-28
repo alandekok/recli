@@ -34,8 +34,29 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <assert.h>
 #include "recli.h"
+
+static int syntax_fprintf_wrapper(void *ctx, const char *fmt, ...)
+{
+	int rcode;
+	va_list args;
+
+	if (!ctx) ctx = stdout;
+
+	va_start(args, fmt);
+	rcode = vfprintf(ctx, fmt, args);
+	va_end(args);
+
+	return rcode;
+}
+
+void *syntax_stdout = NULL;
+void *syntax_stderr = NULL;
+
+syntax_fprintf_t syntax_fprintf = syntax_fprintf_wrapper;
+
 
 /*
  *	This file implements an abstract syntax tree based on
@@ -320,13 +341,13 @@ finish:
 		if (num_entries == 0) return;
 
 #ifndef NDEBUG
-		printf("NUM ENTRIES LEFT: %d\n", num_entries);
+		syntax_fprintf(syntax_stdout, "NUM ENTRIES LEFT: %d\n", num_entries);
 		for (i = 0; i < table_size; i++) {
 			if (!hash_table[i]) continue;
 
-			printf("LEFT %d ", hash_table[i]->refcount);
+			syntax_fprintf(syntax_stdout, "LEFT %d ", hash_table[i]->refcount);
 			syntax_printf(hash_table[i]);
-			printf("\n");
+			syntax_fprintf(syntax_stdout, "\n");
 		}
 #endif
 	}
@@ -1059,7 +1080,7 @@ void syntax_printf(const cli_syntax_t *this)
 	char buffer[8192];
 
 	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
-	printf("%s", buffer);
+	syntax_fprintf(syntax_stdout, "%s", buffer);
 }
 
 
@@ -1076,12 +1097,12 @@ void syntax_print_lines(const cli_syntax_t *this)
 		assert(((cli_syntax_t *)this->first)->type != this->type);
 		syntax_sprintf(buffer, sizeof(buffer),
 				      this->first, CLI_TYPE_EXACT);
-		printf("%s\r\n", buffer);
+		syntax_fprintf(syntax_stdout, "%s\r\n", buffer);
 		this = this->next;
 	}
 
 	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
-	printf("%s\r\n", buffer);
+	syntax_fprintf(syntax_stdout, "%s\r\n", buffer);
 }
 
 
@@ -1622,19 +1643,19 @@ static int syntax_print_pre(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
-		printf("<");
+		syntax_fprintf(syntax_stdout, "<");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		printf("(");
+		syntax_fprintf(syntax_stdout, "(");
 		break;
 
 	case CLI_TYPE_OPTIONAL:
-		printf("[");
+		syntax_fprintf(syntax_stdout, "[");
 		break;
 
 	case CLI_TYPE_KEY:
-		printf("{");
+		syntax_fprintf(syntax_stdout, "{");
 		break;
 
 	default:
@@ -1651,15 +1672,15 @@ static int syntax_print_in(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
-		printf("%s", (const char *)this->first);
+		syntax_fprintf(syntax_stdout, "%s", (const char *)this->first);
 		break;
 
 	case CLI_TYPE_CONCAT:
-		printf(" ");
+		syntax_fprintf(syntax_stdout, " ");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		printf("|");
+		syntax_fprintf(syntax_stdout, "|");
 		break;
 
 	default:
@@ -1676,23 +1697,23 @@ static int syntax_print_post(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
-		printf(">");
+		syntax_fprintf(syntax_stdout, ">");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		printf(")");
+		syntax_fprintf(syntax_stdout, ")");
 		break;
 
 	case CLI_TYPE_OPTIONAL:
-		printf("]");
+		syntax_fprintf(syntax_stdout, "]");
 		break;
 
 	case CLI_TYPE_KEY:
-		printf("}");
+		syntax_fprintf(syntax_stdout, "}");
 		break;
 
 	case CLI_TYPE_PLUS:
-		printf("+");
+		syntax_fprintf(syntax_stdout, "+");
 		break;
 
 	default:
@@ -2165,9 +2186,9 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 #ifndef NDEBUG
 static void syntax_debug(const char *msg, cli_syntax_t *this)
 {
-	printf("%s ", msg);
+	syntax_fprintf(syntax_stdout, "%s ", msg);
 	syntax_printf(this);
-	printf("\r\n");
+	syntax_fprintf(syntax_stdout, "\r\n");
 }
 #endif
 
@@ -2294,7 +2315,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 
 	fp = fopen(filename, "r");
 	if (!fp) {
-		fprintf(stderr, "Failed opening %s: %s\n",
+		syntax_fprintf(syntax_stderr, "Failed opening %s: %s\n",
 			filename, strerror(errno));
 		return -1;
 	}
@@ -2320,7 +2341,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 		q = p;
 
 		if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
-			fprintf(stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
+			syntax_fprintf(syntax_stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
 				filename, lineno,
 				syntax_error_ptr, syntax_error_string);
 			syntax_free(head);
@@ -2395,7 +2416,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 	fp = fopen(filename, "r");
 	if (!fp) {
-		fprintf(stderr, "Failed opening %s: %s\n",
+		syntax_fprintf(syntax_stderr, "Failed opening %s: %s\n",
 			filename, strerror(errno));
 		return -1;
 	}
@@ -2456,7 +2477,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 			if (!str2syntax((const char **)&q, &this, CLI_TYPE_EXACT)) {
 			error:
-				fprintf(stderr, "%s line %d: Invalid syntax \"%s\"\n",
+				syntax_fprintf(syntax_stderr, "%s line %d: Invalid syntax \"%s\"\n",
 					filename, lineno, buffer);
 				syntax_free(head);
 				if (last) syntax_free(last);
@@ -2486,7 +2507,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 		len = strlen(buffer);
 		if ((h + len) >= (help + sizeof(help))) {
-			fprintf(stderr, "%s line %d: Too much help text\n",
+			syntax_fprintf(syntax_stderr, "%s line %d: Too much help text\n",
 				filename, lineno);
 			syntax_free(head);
 			if (last) syntax_free(last);
@@ -2664,7 +2685,7 @@ show_help:
 		len = syntax_sprintf_word(buffer, sizeof(buffer),
 					  this->first);
 
-		if (len != 0) printf("\t%s", buffer);
+		if (len != 0) syntax_fprintf(syntax_stdout, "\t%s", buffer);
 
 		this = this->next;
 	}
@@ -2675,6 +2696,6 @@ show_help:
 	len = syntax_sprintf_word(buffer, sizeof(buffer), this);
 	if (len == 0) return 0;
 	
-	printf("\t%s", buffer);
+	syntax_fprintf(syntax_stdout, "\t%s", buffer);
 	return 1;
 }

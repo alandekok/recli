@@ -289,6 +289,9 @@ int main(int argc, char **argv)
 	linenoiseSetCharacterCallback(foundquote, '\'');
 	linenoiseSetCharacterCallback(foundhelp, '?');
 
+	syntax_stdout = stdout;
+	syntax_stderr = stderr;
+
 	while ((c = getopt(argc, argv, "d:H:p:qr:s:P:X:")) != EOF) switch(c) {
 		case 'd':
 			config.dir = optarg;
