@@ -393,6 +393,13 @@ int main(int argc, char **argv)
 					goto add_line;
 				}
 
+				if (!permission_enforce(config.permissions, my_argc, my_argv)) {
+					fprintf(stderr, "%s\n", line);
+					fprintf(stderr, "^ - No permission\n");
+					runit = 0;
+					goto add_line;
+				}
+
 				ctx_stack[ctx_stack_ptr].len = strlen(line);
 				if (ctx_stack[ctx_stack_ptr].len + 2 >=
 				    sizeof(ctx_stack[ctx_stack_ptr].buffer)) {
