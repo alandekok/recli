@@ -1,0 +1,2 @@
+#!/bin/sh
+Echo "Doing HUP of $*"

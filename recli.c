@@ -9,9 +9,14 @@
 
 static int in_string = 0;
 static size_t string_start = 0;
-static cli_syntax_t *syntax = NULL;
-static cli_syntax_t *syntax_help = NULL;
 
+static recli_config_t config = {
+	.dir = NULL,
+	.prompt = "recli> ",
+	.banner = NULL,
+	.syntax = NULL,
+	.help = NULL
+};
 static size_t ctx_buflen = 0;
 static char ctx_buffer[1024];
 static char ctx_mybuf[1024];
@@ -37,7 +42,7 @@ void completion(const char *buf, linenoiseCompletions *lc)
 
 	if (in_string) return;
 	
-	num = syntax_tab_complete(syntax, buf, strlen(buf), 256, tabs);
+	num = syntax_tab_complete(config.syntax, buf, strlen(buf), 256, tabs);
 	if (num == 0) return;
 	
 	for (i = 0; i < num; i++) {
@@ -103,7 +108,7 @@ int foundhelp(const char *buf, size_t len, char c)
 
 	if (len == 0) {
 		printf("\r\n");
-		syntax_print_lines(syntax);
+		syntax_print_lines(config.syntax);
 		return 1;
 	}
 	
@@ -111,22 +116,17 @@ int foundhelp(const char *buf, size_t len, char c)
 	argc = ctx2argv(mybuf, len, 256, argv);
 	printf("?\r\n");
 	if (argc == 0) {
-		syntax_print_lines(syntax);
+		syntax_print_lines(config.syntax);
 
 	} else {
-		match = syntax_match_max(syntax, argc, argv);
+
+		match = syntax_match_max(config.syntax, argc, argv);
 		if (!match) {
 			printf("NO MATCH\t\n");
 			
 		} else {
-			syntax_printf(match);
 			syntax_free(match);
-			help = syntax_show_help(syntax_help, argc, argv);
-			if (!help) {
-				printf("\r\n");
-			} else {
-				printf(":\r\n%s", help);
-			}
+			syntax_print_context_help(config.help, argc, argv);
 		}
 	}
 	
@@ -135,8 +135,9 @@ int foundhelp(const char *buf, size_t len, char c)
 
 static void runcmd(const char *rundir, int argc, char *argv[])
 {
+	int index = 0;
 	size_t out;
-	char *p, buffer[8192];
+	char *p, *q, buffer[8192];
 	struct stat sbuf;
 
 	if (!rundir || (argc == 0)) return;
@@ -149,17 +150,25 @@ static void runcmd(const char *rundir, int argc, char *argv[])
 		return;
 	}
 
-	p = buffer + out;
+	p = q =  buffer + out;
 	while (argc && ((sbuf.st_mode & S_IFDIR) != 0)) {
-		out = snprintf(p, buffer + sizeof(buffer) - p, "/%s", argv[0]);
+		out = snprintf(p, buffer + sizeof(buffer) - p, "/%s",
+			       argv[index]);
 		p += out;
-		argc--;
-		argv++;
+		index++;
 
 		if (stat(buffer, &sbuf) < 0) {
-			fprintf(stderr, "Error reading rundir '%s': %s\n",
-				buffer, strerror(errno));
-			return;
+			snprintf(q, sizeof(buffer) - (q - buffer), "/run");
+			if (stat(buffer, &sbuf) < 0) {
+				for (index = 0; index < argc; index++) {
+					printf("%s ", argv[index]);
+				}
+				printf("\r\n");
+				return;
+			}
+
+			index = 0;
+			goto run;
 		}
 	}
 
@@ -168,32 +177,77 @@ static void runcmd(const char *rundir, int argc, char *argv[])
 		return;
 	}
 
-	fprintf(stderr, "RUNNING CMD %s %d\n", buffer, argc);
-
+run:
+	argc -= index;
+	argv += index;
+	
 	argv[argc] = NULL;
 	memmove(argv + 1, argv, sizeof(argv[0]) * argc + 1);
 	argv[0] = buffer;
+
+	printf("\r");
 
 	if (fork() == 0) {
 		execvp(buffer, argv);
 	}
 
-	/* FIXME: set line buf stdout normal, wait for child */
+	waitpid(-1, NULL, 0);
+	printf("\r");
 }
+
+static int do_help(char *buffer, size_t len)
+{
+	int my_argc;
+	char *my_argv[128];
+
+	if (strcmp(buffer, "help syntax") == 0) {
+		cli_syntax_t *match;
+
+		my_argc = str2argv(ctx_buffer, ctx_buflen, 128, my_argv);
+		if (my_argc < 0) return -1;
+
+		match = syntax_match_max(config.syntax,
+					 my_argc, my_argv);
+		if (match) {
+			syntax_print_lines(match);
+			syntax_free(match);
+		}
+		return 1;
+	}
+
+	if ((strcmp(buffer, "help") == 0) ||
+	    (strncmp(buffer, "help ", 5) == 0)) {
+		const char *help = NULL;
+
+		my_argc = ctx2argv(buffer + 4, len - 4, 128, my_argv);
+		if (my_argc < 0) return -1;
+				
+		help = syntax_show_help(config.help,
+					my_argc, my_argv, 1);
+		if (!help) {
+			printf("\r\n");
+		} else {
+			printf("%s", help);
+		}
+		return 1;
+	}
+
+	return 0;		/* not help */
+}
+
 
 static const char *spaces = "                                                                                                                                                                                                                                                                ";
 
 int main(int argc, char **argv)
 {
 	int c, my_argc;
-	const char *baseprompt = "recli> ";
-	const char *prompt = baseprompt;
-	const char *rundir = NULL;
+	const char *prompt = config.prompt;
 	int quit = 0;
 	int context = 1;
 	char *line;
 	char *my_argv[128];
 	int tty = 1;
+	int debug_syntax = 0;
 	char mybuf[1024];
 
 #ifndef NO_COMPLETION
@@ -205,9 +259,13 @@ int main(int argc, char **argv)
 	linenoiseSetCharacterCallback(foundquote, '\'');
 	linenoiseSetCharacterCallback(foundhelp, '?');
 
-	while ((c = getopt(argc, argv, "H:p:qr:s:P:X:")) != EOF) switch(c) {
+	while ((c = getopt(argc, argv, "d:H:p:qr:s:P:X:")) != EOF) switch(c) {
+		case 'd':
+			config.dir = optarg;
+			break;
+
 		case 'H':
-			if (syntax_parse_help(optarg, &syntax_help) < 0) exit(1);
+			if (syntax_parse_help(optarg, &config.help) < 0) exit(1);
 			break;
 
 		case 'p':
@@ -218,21 +276,17 @@ int main(int argc, char **argv)
 			quit = 1;
 			break;
 
-		case 'r':
-			rundir = optarg;
-			break;
-
 		case 's':
-			if (syntax_parse_file(optarg, &syntax) < 0) exit(1);
+			if (syntax_parse_file(optarg, &config.syntax) < 0) exit(1);
 			break;
 
 		case 'P':
-			baseprompt = prompt = optarg;
+			config.prompt = prompt = optarg;
 			break;
 		    
 		case 'X':
 			if (strcmp(optarg, "syntax") == 0) {
-				syntax_printf(syntax);printf("\r\n");
+				debug_syntax = 1;
 			}
 			break;
 		    
@@ -245,9 +299,19 @@ int main(int argc, char **argv)
 	argv += (optind - 1);
 
 	if (!isatty(STDIN_FILENO)) {
-		baseprompt = prompt = "";
+		config.prompt = prompt = "";
 		context = 0;
 		tty = 0;
+	}
+
+	if (config.dir) {
+		if (recli_bootstrap(&config) < 0) {
+			exit(1);
+		}
+	}
+
+	if (debug_syntax) {
+		syntax_printf(config.syntax);printf("\r\n");
 	}
 
 	if (quit) goto done;
@@ -262,41 +326,55 @@ int main(int argc, char **argv)
 			if (context && (strcmp(line, "end") == 0)) {
 				ctx_buflen = 0;
 				ctx_buffer[0] = '\0';
-				prompt = baseprompt;
+				prompt = config.prompt;
 				goto next_line;
 			}
 
 			memcpy(mybuf, line, mylen + 1);
 
+			/*
+			 *	Look for "help" BEFORE splitting the
+			 *	line.  This is so that we can do help
+			 *	when the user has a context.
+			 */
+			if (config.help) {
+				c = do_help(mybuf, mylen);
+				if (c < 0) goto show_error;
+				if (c == 1) {
+					runit = 0;
+					goto add_line;
+				}
+			}
+
 			my_argc = ctx2argv(mybuf, mylen, 128, my_argv);
 			if (my_argc < 0) {
 				c = -1;
-
-			} else {
-				c = syntax_check(syntax, my_argc, my_argv, &fail);
-				if ((c == 0) && !context) c = -1;
-				
-				if (c == 0) {
-					strcat(ctx_buffer, line);
-					ctx_buflen = strlen(ctx_buffer);
-					ctx_buffer[ctx_buflen] = ' ';
-					ctx_buflen++;
-					prompt = "recli ...> ";
-					goto next_line;
-				}
-
-				/*
-				 *	We return the error based on
-				 *	what the user entered, not on
-				 *	what we synthesized from the
-				 *	context.
-				 */
-				if (ctx_buflen) {
-					fail += ctx_buflen + 1;
-				}
-
+				goto show_error;
 			}
-				
+
+			c = syntax_check(config.syntax, my_argc, my_argv, &fail);
+			if ((c == 0) && !context) c = -1;
+			
+			if (c == 0) {
+				strcat(ctx_buffer, line);
+				ctx_buflen = strlen(ctx_buffer);
+				ctx_buffer[ctx_buflen] = ' ';
+				ctx_buflen++;
+				prompt = "recli ...> ";
+				goto next_line;
+			}
+			
+			/*
+			 *	We return the error based on
+			 *	what the user entered, not on
+			 *	what we synthesized from the
+			 *	context.
+			 */
+			if (ctx_buflen) {
+				fail += ctx_buflen + 1;
+			}
+			
+		show_error:			
 			if (c < 0) {
 				fprintf(stderr, "%s\n", line);
 				if (fail &&
@@ -318,20 +396,21 @@ int main(int argc, char **argv)
 				goto add_line;
 			}
 
-			printf("%s%s\n", ctx_buffer, line);
+			if (!config.dir) printf("%s%s\n", ctx_buffer, line);
 
 		add_line:
 			linenoiseHistoryAdd(line);
 			linenoiseHistorySave("history.txt"); /* Save every new entry */
 
-			if (runit && rundir) runcmd(rundir, my_argc, my_argv);
+			if (runit && config.dir) runcmd(config.dir, my_argc, my_argv);
 		}
 	next_line:
 		free(line);
 	}
 
 done:
-	if (syntax_help) syntax_free(syntax_help);
+	if (config.help) syntax_free(config.help);
+	syntax_free(config.syntax);
 	syntax_free(NULL);
 
 	return 0;

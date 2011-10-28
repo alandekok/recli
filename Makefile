@@ -1,6 +1,7 @@
 all:  recli linenoise_example linenoise_utf8_example linenoise_cpp_example
 
-RECLI_SRCS := linenoise.c recli.c util.c syntax.c permission.c datatypes.c
+RECLI_SRCS := linenoise.c recli.c util.c syntax.c permission.c datatypes.c \
+	dir.c
 
 recli: linenoise.h recli.h datatypes.h $(RECLI_SRCS)
 	$(CC) -Wall -W -g -o $@ $(RECLI_SRCS)

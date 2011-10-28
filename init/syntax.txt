@@ -1,0 +1,4 @@
+COMMAND=(start|stop|restart|hup|status)
+SERVICE=(postfix|bind|dhcpd)
+
+COMMAND SERVICE

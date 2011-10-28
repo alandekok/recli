@@ -63,8 +63,6 @@ struct cli_syntax_t {
 	int length;		/* for concatenation nodes */
 };
 
-static cli_syntax_t *syntaxes;
-
 #define FNV_MAGIC_INIT (0x811c9dc5)
 #define FNV_MAGIC_PRIME (0x01000193)
 
@@ -218,16 +216,14 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
  *	Free a node by decrementing its reference count.  When the
  *	count goes to zero, free the node.
  */
-void syntax_free(cli_syntax_t *this)
+void syntax_free(cli_syntax_t *start)
 {
 	int flag = 0;
-	cli_syntax_t *next;
+	cli_syntax_t *this, *next;
 
-	if (!this) {
-		this = syntaxes;
-		if (!this) return;
-		flag = 1;
-	}
+	this = start;
+
+	if (!this) goto finish;
 
 	assert(this->refcount > 0);
 
@@ -288,8 +284,7 @@ redo:
 	}
 
 finish:
-#ifndef NDEBUG
-	if (flag && (num_entries > 4)) {
+	if (!start && (num_entries > 4)) {
 		int i;
 
 		for (i = 0; i < table_size; i++) {
@@ -312,6 +307,7 @@ finish:
 
 		if (num_entries == 0) return;
 
+#ifndef NDEBUG
 		printf("NUM ENTRIES LEFT: %d\n", num_entries);
 		for (i = 0; i < table_size; i++) {
 			if (!hash_table[i]) continue;
@@ -320,9 +316,8 @@ finish:
 			syntax_printf(hash_table[i]);
 			printf("\n");
 		}
-
-	}
 #endif
+	}
 }
 
 
@@ -1412,7 +1407,7 @@ int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
 	find.first = (void *) name;
 	find.next = NULL;
 	this = syntax_find(&find);
-	if (this) return 0;
+	if (this) return 1;
 
 	len = strlen(name);
 
@@ -2093,7 +2088,9 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 	if (match.stack[0].argc != 0) {
 		rcode = argc - match.stack[0].fail_argc;
 
-		if (match.stack[0].fail) *fail = argv[rcode];
+		if (match.stack[0].fail) {
+			*fail = argv[rcode];
+		}
 
 		return -1;
 	}
@@ -2263,7 +2260,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 
 	if (!phead) return -1;
 
-	if (!syntaxes) {
+	if (!*phead) {
 		int i;
 
 		for (i = 0; recli_datatypes[i].name != NULL; i++) {
@@ -2330,9 +2327,35 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 				syntax_print_post);
 	}
 
-	*phead = syntaxes = head;
+	*phead = head;
 
 	return 0;
+}
+
+
+static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
+		     const char *help, int flag)
+{
+	cli_syntax_t *this;
+
+
+	this = syntax_new(CLI_TYPE_EXACT, help, NULL);
+	assert(this != NULL);
+	this->length = flag; /* internal flag... */
+
+	this = syntax_new(CLI_TYPE_CONCAT, last, this);
+	assert(this != NULL);
+	
+	if (!*phead) {
+		*phead = this;
+	} else {
+		cli_syntax_t *a;
+		
+		a = syntax_new(CLI_TYPE_ALTERNATE, *phead, this);
+		assert(a != NULL);
+		
+		*phead = a;
+	}
 }
 
 
@@ -2375,22 +2398,12 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 		do_last:
 			if (!h) goto error;
 
-			this = syntax_new(CLI_TYPE_EXACT, help, NULL);
-			assert(this != NULL);
-			this->length = 1; /* internal flag... */
-
-			this = syntax_new(CLI_TYPE_CONCAT, last, this);
-			assert(this != NULL);
-
-			if (!head) {
-				head = this;
+			h = help;
+			while (isspace((int) *h)) h++;
+			if (*h) {
+				add_help(&head, last, help, 1);
 			} else {
-				cli_syntax_t *a;
-				
-				a = syntax_new(CLI_TYPE_ALTERNATE, head, this);
-				assert(a != NULL);
-				
-				head = a;
+				syntax_free(last);
 			}
 			last = NULL;
 			h = NULL;
@@ -2437,6 +2450,19 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 			continue;
 		}
 
+		p = strchr(buffer, '\r');
+		if (p) *p = '\0';
+		p = strchr(buffer, '\n');
+		if (p) *p = '\0';
+
+		strcat(buffer, "\r\n");
+
+		if (last && (strncmp(buffer, "    ", 4) == 0)) {
+			last->refcount++;
+			add_help(&head, last, buffer + 4, 2);
+			continue;
+		}
+
 		len = strlen(buffer);
 		if ((h + len) >= (help + sizeof(help))) {
 			fprintf(stderr, "%s line %d: Too much help text\n",
@@ -2468,14 +2494,21 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 /*
  *	Show help for a given argv[]
  */
-const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
+const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[],
+			     int flag)
 {
 	int rcode;
+	const char *help = NULL;
+	cli_syntax_t *this, *tail;
 	cli_match_t match;
 
-	if (!head || !argc) return NULL;
+	if (!head || (argc < 0)) return NULL;
 
-	if (argc < 0) return NULL;
+	if (argc == 0) {
+		head->refcount++;
+		tail = head;
+		goto show_help;
+	}
 
 	memset(&match, 0, sizeof(match));
 	match.ptr = 0;
@@ -2495,8 +2528,139 @@ const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
 
 	if (!match.stack[0].want_more) return NULL;
 
-	if ((match.stack[0].fail->type != CLI_TYPE_EXACT) ||
-	    (match.stack[0].fail->length != 1)) return NULL; /* not help text */
+	/*
+	 *	And duplicate a lot of the above work because
+	 *	the function returns the wrong "fail".
+	 */
+	this = syntax_match_max(head, argc, argv);
+	tail = syntax_skip(this, argc);
+	assert(tail != NULL);
+	syntax_free(this);
 
-	return match.stack[0].fail->first;
+show_help:
+	this = tail;
+
+	while (this->type == CLI_TYPE_ALTERNATE) {
+		cli_syntax_t *first = tail->first;
+		if ((first->type == CLI_TYPE_EXACT) &&
+		    (first->length == flag)) {
+			this = first;
+			break;
+		}
+
+		this = this->next;
+	}
+
+	if ((this->type == CLI_TYPE_EXACT) &&
+	    (this->length == flag)) {
+		help = this->first;
+	}
+
+	syntax_free(tail);
+	return help;
+}
+
+static size_t syntax_sprintf_word(char *buffer, size_t len, cli_syntax_t *this)
+{
+	size_t outlen;
+	cli_syntax_t *next;
+
+redo:
+	switch (this->type) {
+	case CLI_TYPE_EXACT:
+		if (this->length == 1) return 0;
+		return snprintf(buffer, len, "%s", (char *) this->first);
+
+	case CLI_TYPE_CONCAT:
+		next = this->next;
+		if ((next->type != CLI_TYPE_EXACT) ||
+		    (next->length != 2)) return 0;
+		outlen = syntax_sprintf_word(buffer, len, this->first);
+		if (outlen == 0) return 0;
+
+		buffer += outlen;
+		len -= outlen;
+		strcpy(buffer, ": ");
+		buffer += 2;
+		len -= 2;
+		return outlen + syntax_sprintf_word(buffer, len, this->next);
+
+	case CLI_TYPE_OPTIONAL:
+	case CLI_TYPE_KEY:
+	case CLI_TYPE_PLUS:
+		this = this->first;
+		goto redo;
+
+	default:
+		return 0;
+	}
+
+}
+
+int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
+{
+	int i, rcode;
+	size_t len;
+	const char *help = NULL;
+	cli_syntax_t *this, *tail;
+	cli_match_t match;
+	char *p, buffer[1024];
+
+	if (!head || (argc < 0)) return -1;
+
+	if (argc == 0) {
+		head->refcount++;
+		tail = head;
+		goto show_help;
+	}
+
+	memset(&match, 0, sizeof(match));
+	match.ptr = 0;
+	match.argc = argc;
+	match.word = &match.stack[0];
+	match.word->start_argc = argc;
+	match.word->argc = argc;
+	match.word->argv = argv;
+	match.word->match = 0;
+
+	rcode = syntax_walk_all(head, &match, syntax_match_pre,
+				syntax_match_in, syntax_match_post);
+			     
+	if (!rcode) return -1;
+
+	if (match.stack[0].argc != 0) return -1;
+
+	if (!match.stack[0].want_more) return -1;
+
+	this = syntax_match_max(head, argc, argv);
+	tail = syntax_skip(this, argc);
+	assert(tail != NULL);
+	syntax_free(this);
+
+show_help:
+	this = tail;
+
+	p = buffer;
+	for (i = 0; i < argc; i++) {
+		len = snprintf(p, sizeof(buffer) - (p - buffer), "%s ", argv[i]);
+		p += len;
+	}
+
+	while (this->type == CLI_TYPE_ALTERNATE) {
+		len = syntax_sprintf_word(p, sizeof(buffer) - (p - buffer),
+					  this->first);
+
+		if (len != 0) printf("%s", buffer);
+
+		this = this->next;
+	}
+
+	assert(this->type != CLI_TYPE_ALTERNATE);
+
+	syntax_free(tail);
+	len = syntax_sprintf_word(p, sizeof(buffer) - (p - buffer), this);
+	if (len == 0) return 0;
+	
+	printf("%s", buffer);
+	return 1;
 }
