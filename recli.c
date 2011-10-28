@@ -18,20 +18,38 @@ static recli_config_t config = {
 	.help = NULL,
 	.permissions = NULL
 };
-static size_t ctx_buflen = 0;
-static char ctx_buffer[1024];
-static char ctx_mybuf[1024];
+
+typedef struct ctx_stack_t {
+	size_t len;
+	char   buffer[256];
+} ctx_stack_t;
+
+#define CTX_STACK_MAX (32)
+
+static int ctx_stack_ptr = 0;
+static ctx_stack_t ctx_stack[CTX_STACK_MAX];
+
+static char ctx_mybuf[8192];
 
 static int ctx2argv(char *buf, size_t len, int max_argc, char *argv[])
 {
-	if (!ctx_buflen) {
+	int i;
+	char *p;
+
+	if (!ctx_stack_ptr) {
 		return str2argv(buf, len, max_argc, argv);
 	}	
 
-	memcpy(ctx_mybuf, ctx_buffer, ctx_buflen);
-	memcpy(ctx_mybuf + ctx_buflen, buf, len + 1);
+	p = ctx_mybuf;
+	for (i = 0; i < ctx_stack_ptr; i++) {
+		memcpy(p, ctx_stack[i].buffer, ctx_stack[i].len);
+		p += ctx_stack[i].len;
+	}
 
-	return str2argv(ctx_mybuf, ctx_buflen + len, max_argc, argv);
+	memcpy(p, buf, len + 1);
+	p += len;
+
+	return str2argv(ctx_mybuf, p - ctx_mybuf, max_argc, argv);
 }
 
 
@@ -99,7 +117,6 @@ int foundhelp(const char *buf, size_t len, char c)
 {
 	int argc;
 	char *argv[256];
-	const char *help;
 	cli_syntax_t *match;
 	char mybuf[1024];
 	
@@ -109,7 +126,19 @@ int foundhelp(const char *buf, size_t len, char c)
 
 	if (len == 0) {
 		printf("\r\n");
-		syntax_print_lines(config.syntax);
+		if (ctx_stack_ptr == 0) {
+			syntax_print_lines(config.syntax);
+			return 1;
+		}
+
+		memcpy(mybuf, buf, len + 1);
+		argc = ctx2argv(mybuf, len, 256, argv);
+
+		match = syntax_match_max(config.syntax, argc, argv);
+		if (!match) return 1;
+
+		syntax_print_lines(match);
+		syntax_free(match);
 		return 1;
 	}
 	
@@ -204,7 +233,7 @@ static int do_help(char *buffer, size_t len)
 	if (strcmp(buffer, "help syntax") == 0) {
 		cli_syntax_t *match;
 
-		my_argc = str2argv(ctx_buffer, ctx_buflen, 128, my_argv);
+		my_argc = ctx2argv(buffer, len, 128, my_argv);
 		if (my_argc < 0) return -1;
 
 		match = syntax_match_max(config.syntax,
@@ -325,9 +354,10 @@ int main(int argc, char **argv)
 			size_t mylen = strlen(line);
 
 			if (context && (strcmp(line, "end") == 0)) {
-				ctx_buflen = 0;
-				ctx_buffer[0] = '\0';
-				prompt = config.prompt;
+				if (ctx_stack_ptr > 0) {
+					ctx_stack_ptr--;
+				}
+				if (ctx_stack_ptr == 0) prompt = config.prompt;
 				goto next_line;
 			}
 
@@ -357,11 +387,28 @@ int main(int argc, char **argv)
 			if ((c == 0) && !context) c = -1;
 			
 			if (c == 0) {
-				strcat(ctx_buffer, line);
-				ctx_buflen = strlen(ctx_buffer);
-				ctx_buffer[ctx_buflen] = ' ';
-				ctx_buflen++;
+				if (ctx_stack_ptr == CTX_STACK_MAX) {
+					runit = 0;
+					c = -1;
+					goto add_line;
+				}
+
+				ctx_stack[ctx_stack_ptr].len = strlen(line);
+				if (ctx_stack[ctx_stack_ptr].len + 2 >=
+				    sizeof(ctx_stack[ctx_stack_ptr].buffer)) {
+					runit = 0;
+					c = -1;
+					goto add_line;
+				}
+
+				memcpy(ctx_stack[ctx_stack_ptr].buffer, line,
+				       ctx_stack[ctx_stack_ptr].len);
+
+				memcpy(ctx_stack[ctx_stack_ptr].buffer + 
+				       ctx_stack[ctx_stack_ptr].len, " ", 2);
+				ctx_stack[ctx_stack_ptr].len++;
 				prompt = "recli ...> ";
+				ctx_stack_ptr++;
 				goto next_line;
 			}
 			
@@ -371,8 +418,12 @@ int main(int argc, char **argv)
 			 *	what we synthesized from the
 			 *	context.
 			 */
-			if (ctx_buflen) {
-				fail += ctx_buflen + 1;
+			if (ctx_stack_ptr) {
+				int i;
+
+				for (i = 0; i < ctx_stack_ptr; i++) {
+					fail += ctx_stack[i].len;
+				}
 			}
 			
 		show_error:			
@@ -397,7 +448,14 @@ int main(int argc, char **argv)
 				goto add_line;
 			}
 
-			if (!config.dir) printf("%s%s\n", ctx_buffer, line);
+			if (!config.dir) {
+				int i;
+
+				for (i = 0; i < ctx_stack_ptr; i++) {
+					printf("%s", ctx_stack[i].buffer);
+				}
+				printf("%s\n", line);
+			}
 
 		add_line:
 			linenoiseHistoryAdd(line);
