@@ -16,6 +16,7 @@ typedef struct cli_syntax_t cli_syntax_t;
 typedef int (*syntax_fprintf_t)(void *ctx, const char *fmt, ...);
 extern void *syntax_stdout;
 extern void *syntax_stderr;
+extern syntax_fprintf_t syntax_fprintf;
 
 extern int syntax_parse_file(const char *filename, cli_syntax_t **);
 extern void syntax_free(cli_syntax_t *);
