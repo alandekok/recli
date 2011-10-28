@@ -270,7 +270,7 @@ static const char *spaces = "                                                   
 
 int main(int argc, char **argv)
 {
-	int c, my_argc;
+	int c, rcode, my_argc;
 	const char *prompt = config.prompt;
 	int quit = 0;
 	int context = 1;
@@ -302,7 +302,9 @@ int main(int argc, char **argv)
 			break;
 
 		case 'p':
-			if (permission_parse_file(optarg, &config.permissions) < 0) exit(1);
+			rcode = permission_parse_file(optarg, &config.permissions);
+			if (rcode < 0) exit(1);
+			if (rcode == 0) exit(0);
 			break;
 
 		case 'q':

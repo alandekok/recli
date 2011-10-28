@@ -166,7 +166,15 @@ int permission_parse_file(const char *filename, cli_permission_t **phead)
 	fclose(fp);
 	*phead = head;
 
-	return 0;
+	/*
+	 *	Not allowed to do anything.
+	 */
+	if (!head->next && !head->allowed && (head->argc == 1) &&
+	    (strcmp(head->argv[0], "*") == 0)) {
+		return 0;
+	}
+
+	return 1;
 }
 
 void permission_free(cli_permission_t *head)

@@ -1,0 +1,4 @@
+# A wildcard permissions file
+#
+#  They're not allowed to do anything.
+!*

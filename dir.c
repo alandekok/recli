@@ -45,6 +45,7 @@
 
 int recli_bootstrap(recli_config_t *config)
 {
+	int rcode;
 	struct stat statbuf;
 	char buffer[8192];
 
@@ -93,14 +94,19 @@ int recli_bootstrap(recli_config_t *config)
 		pwd = getpwuid(getuid());
 		if (pwd) name = pwd->pw_name;
 
-		if (name) {
-			snprintf(buffer, sizeof(buffer), "%s/permission/%s.txt",
-				 config->dir, name);
-			if ((stat(buffer, &statbuf) >= 0) &&
-			    (permission_parse_file(buffer, &config->permissions) < 0)) {
-				return -1;
-			}
-		} /* else ignore any permissions */
+		if (!name) name = "DEFAULT";
+		snprintf(buffer, sizeof(buffer), "%s/permission/%s.txt",
+			 config->dir, name);
+		if (stat(buffer, &statbuf) >= 0) {
+			rcode =  permission_parse_file(buffer,
+						       &config->permissions);
+			if (rcode < 0) return -1;
+			
+			/*
+			 *	Not allowed to do anything: exit.
+			 */
+			if (rcode == 0) exit(0);
+		}
 	}
 
 	return 0;
