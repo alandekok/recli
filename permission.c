@@ -95,20 +95,24 @@ static cli_permission_t *permission_parse_line(const char *buf)
 {
 	size_t len;
 	cli_permission_t *this;
-
 	int argc;
 	char *argv[256];
-
+	char *buffer;
 
 	len = strlen(buf);
+	if (len == 0) return NULL;
 
-	this->input_line = malloc(len + 1);
-	memcpy(this->input_line, buf, len + 1);
-	argc = str2argv(this->input_line, len, 256, argv);
-	if (argc == 0) return NULL;
+	buffer = malloc(len + 1);
+	memcpy(buffer, buf, len + 1);
+	argc = str2argv(buffer, len, 256, argv);
+	if (argc == 0) {
+		free(buffer);
+		return NULL;
+	}
 
 	this = calloc(sizeof(*this) + (sizeof(this->argv[0]) * (argc - 1)), 1);
 	this->allowed = 1;
+	this->input_line = buffer;
 
 	if (argv[0][0] == '!') {
 		this->allowed = 0;
