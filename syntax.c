@@ -243,6 +243,9 @@ redo:
 
 		syntax_free(this->first);
 		next = this->next;
+#ifndef NDEBUG
+		memset(this, 0, sizeof(*this));
+#endif
 		free(this);
 		this = next;
 		goto redo;
@@ -255,6 +258,9 @@ redo:
 		num_entries--;
 
 		next = this->first;
+#ifndef NDEBUG
+		memset(this, 0, sizeof(*this));
+#endif
 		free(this);
 		this = next;
 		goto redo;
@@ -265,6 +271,9 @@ redo:
 		num_entries--;
 
 		next = this->next;
+#ifndef NDEBUG
+		memset(this, 0, sizeof(*this));
+#endif
 		free(this);
 		this = next;
 		goto redo;
@@ -274,6 +283,9 @@ redo:
 		hash_table[this->hash & (table_size - 1)] = NULL;
 		num_entries--;
 
+#ifndef NDEBUG
+		memset(this, 0, sizeof(*this));
+#endif
 		free(this);
 		break;
 
@@ -854,11 +866,12 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		    (type == CLI_TYPE_OPTIONAL)) {
 #ifndef NDEBUG
 			a = first;
-			assert(a->refcount > 0);
+			assert(a->refcount > 1);
 			
 			if (next) {
 				b = next;
-				assert(b->refcount > 0);
+
+				assert(b->refcount > 1);
 			}
 #endif
 
@@ -1975,6 +1988,9 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 	do_concat:
 		if (!next) return this;
 
+		assert(this->refcount > 0);
+		assert(next->refcount > 0);
+
 		next->refcount++;
 		return syntax_new(CLI_TYPE_CONCAT, this, next);
 
@@ -2116,10 +2132,12 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 	while (this && (match < argc)) {
 		next = syntax_match_word(argv[match], CLI_MATCH_EXACT,
 					 this, NULL);
-		syntax_free(this);
 		if (!next) break;
 
+		syntax_free(this);
+
 		this = syntax_skip(next, 1);
+
 		assert(this != next);
 		syntax_free(next);
 		match++;
@@ -2601,7 +2619,6 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 {
 	int i, rcode;
 	size_t len;
-	const char *help = NULL;
 	cli_syntax_t *this, *tail;
 	cli_match_t match;
 	char *p, buffer[1024];
