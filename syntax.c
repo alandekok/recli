@@ -2617,11 +2617,11 @@ redo:
 
 int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 {
-	int i, rcode;
+	int rcode;
 	size_t len;
 	cli_syntax_t *this, *tail;
 	cli_match_t match;
-	char *p, buffer[1024];
+	char buffer[1024];
 
 	if (!head || (argc < 0)) return -1;
 
@@ -2657,17 +2657,11 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 show_help:
 	this = tail;
 
-	p = buffer;
-	for (i = 0; i < argc; i++) {
-		len = snprintf(p, sizeof(buffer) - (p - buffer), "%s ", argv[i]);
-		p += len;
-	}
-
 	while (this->type == CLI_TYPE_ALTERNATE) {
-		len = syntax_sprintf_word(p, sizeof(buffer) - (p - buffer),
+		len = syntax_sprintf_word(buffer, sizeof(buffer),
 					  this->first);
 
-		if (len != 0) printf("%s", buffer);
+		if (len != 0) printf("\t%s", buffer);
 
 		this = this->next;
 	}
@@ -2675,9 +2669,9 @@ show_help:
 	assert(this->type != CLI_TYPE_ALTERNATE);
 
 	syntax_free(tail);
-	len = syntax_sprintf_word(p, sizeof(buffer) - (p - buffer), this);
+	len = syntax_sprintf_word(buffer, sizeof(buffer), this);
 	if (len == 0) return 0;
 	
-	printf("%s", buffer);
+	printf("\t%s", buffer);
 	return 1;
 }
