@@ -16,7 +16,7 @@ linenoise_cpp_example: linenoise.h linenoise.c
 	g++ -Wall -W -Os -g -o $@ linenoise.c example.c
 
 clean:
-	@rm -f linenoise_example linenoise_utf8_example linenoise_cpp_example cli
+	@rm -f linenoise_example linenoise_utf8_example linenoise_cpp_example recli
 	@rm -rf *.o *~ *.dSYM
 	@$(MAKE) -C tests clean
 
