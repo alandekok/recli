@@ -257,7 +257,7 @@ static int do_help(char *buffer, size_t len)
 		if (!help) {
 			printf("\r\n");
 		} else {
-			printf("%s", help);
+			recli_fprintf_words(syntax_stdout, "%s", help);
 		}
 		return 1;
 	}

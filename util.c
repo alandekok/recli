@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -117,4 +118,61 @@ void print_argv_string(int argc, char *argv[])
 	for (i = 0; i < argc; i++) {
 		printf("%s ", argv[i]);
 	}
+}
+
+static size_t linelen(const char *buffer, int cols)
+{
+	const char *p;
+
+	p = buffer;
+
+	/*
+	 *	Step 1: go up "cols" characters
+	 */
+	while (*p) {
+		if ((p - buffer) >= cols) break;
+		p++;
+	}
+
+	if (!*p) return p - buffer; /* short */
+
+	/*
+	 *	Step 2: back up to the previous space
+	 */
+	while ((*p != ' ') && (p >= buffer)) p--;
+
+	if (p > buffer) return p - buffer;
+
+	/*
+	 *	No previous space, print the entire word.
+	 */
+	while (*p && (*p != ' ')) p++;
+
+	return p - buffer;
+}
+
+int recli_fprintf_words(void *ctx, const char *fmt, ...)
+{
+	int cols = linenoiseCols();
+	size_t len = 0;
+	va_list args;
+	char *p, buffer[8192];
+
+	va_start(args, fmt);
+
+	if (cols <= 0) cols = 80;
+
+	vsnprintf(buffer, sizeof(buffer), fmt, args);
+
+	p = buffer;
+	while (*p) {
+		len = linelen(p, cols - 1);
+		syntax_fprintf(ctx, "%.*s\r\n", len, p);
+		p += len;
+		while (*p == ' ') p++;
+	}
+
+	va_end(args);
+
+	return len;
 }

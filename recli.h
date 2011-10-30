@@ -1,10 +1,12 @@
 #include "linenoise.h"
+#include <stdarg.h>
 #include "datatypes.h"
 
 extern ssize_t strquotelen(const char *str);
 extern int str2argv(char *buf, size_t len, int max_argc, char *argv[]);
 extern void print_argv(int argc, char *argv[]);
 extern void print_argv_string(int argc, char *argv[]);
+extern int recli_fprintf_words(void *ctx, const char *fmt, ...);
 
 typedef struct cli_permission_t cli_permission_t;
 
