@@ -1409,3 +1409,12 @@ char **linenoiseHistory(int *len) {
     }
     return history;
 }
+
+int linenoiseCols(void)
+{
+    struct current current;
+
+    getWindowSize(&current);
+
+    return current.cols;
+}
