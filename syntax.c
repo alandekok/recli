@@ -2326,6 +2326,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
 		char *p;
 		const char *q;
+
 		lineno++;
 
 		p = strchr(buffer, '\r');
@@ -2340,11 +2341,22 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 
 		q = p;
 
+#ifdef USE_UTF8
+		if (!utf8_strvalid(p)) {
+			syntax_fprintf(syntax_stderr, "%s line %d: Invalid UTF-8 character in input\n",
+				       filename, lineno);
+			syntax_free(head);
+			fclose(fp);
+			return -1;
+		}
+#endif
+
 		if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
 			syntax_fprintf(syntax_stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
 				filename, lineno,
 				syntax_error_ptr, syntax_error_string);
 			syntax_free(head);
+			fclose(fp);
 			return -1;
 		}
 
@@ -2356,7 +2368,10 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 			cli_syntax_t *a;
 
 			a = syntax_new(CLI_TYPE_ALTERNATE, head, this);
-			if (!a) return -1;
+			if (!a) {
+				fclose(fp);
+				return -1;
+			}
 			this = NULL;
 			head = a;
 		}
@@ -2379,7 +2394,6 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 		     const char *help, int flag)
 {
 	cli_syntax_t *this;
-
 
 	this = syntax_new(CLI_TYPE_EXACT, help, NULL);
 	assert(this != NULL);
@@ -2433,6 +2447,17 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 		lineno++;
 		p = buffer;
 		
+#ifdef USE_UTF8
+		if (!utf8_strvalid(p)) {
+			syntax_fprintf(syntax_stderr, "%s line %d: Invalid UTF-8 character in input \n",
+				       filename, lineno);
+			syntax_free(head);
+			if (last) syntax_free(last);
+			fclose(fp);
+			return -1;
+		}
+#endif
+
 		/*
 		 *	Had previous command and help text.  Add it in.
 		 */
@@ -2481,6 +2506,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 					filename, lineno, buffer);
 				syntax_free(head);
 				if (last) syntax_free(last);
+				fclose(fp);
 				return -1;
 			}
 

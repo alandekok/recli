@@ -131,7 +131,11 @@ static size_t linelen(const char *buffer, int cols)
 	 */
 	while (*p) {
 		if ((p - buffer) >= cols) break;
+#ifdef USE_UTF8
+		p += utf8_charlen((int) *p);
+#else
 		p++;
+#endif
 	}
 
 	if (!*p) return p - buffer; /* short */
