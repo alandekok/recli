@@ -366,6 +366,11 @@ int main(int argc, char **argv)
 				goto next_line;
 			}
 
+			if (mylen >= sizeof(mybuf)) {
+				fprintf(stderr, "line too long\r\n");
+				goto next_line;
+			}
+
 			memcpy(mybuf, line, mylen + 1);
 
 			/*
