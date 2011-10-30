@@ -50,6 +50,18 @@ int utf8_charlen(int c)
     return -1;
 }
 
+int utf8_strvalid(const char *str)
+{
+	int charlen = 0;
+
+	while (*str) {
+		charlen = utf8_charlen((int) *str);
+		if (charlen < 0) return 0;
+	}
+
+	return 1;
+}
+
 int utf8_strlen(const char *str, int bytelen)
 {
     int charlen = 0;

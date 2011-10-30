@@ -14,6 +14,7 @@
 /* No utf-8 support. 1 byte = 1 char */
 #define utf8_strlen(S, B) ((B) < 0 ? (int)strlen(S) : (B))
 #define utf8_tounicode(S, CP) (*(CP) = (unsigned char)*(S), 1)
+#define utf8_valid(S) (1)
 #define utf8_index(C, I) (I)
 #define utf8_charlen(C) 1
 
@@ -34,6 +35,11 @@ int utf8_fromunicode(char *p, unsigned short uc);
  * Note that charlen=4 is not supported by the rest of the API.
  */
 int utf8_charlen(int c);
+
+/**
+ * Returns 1 if the string is a valid UTF-8 string, 0 otherwise.
+ */
+int utf8_strvalid(const char *str);
 
 /**
  * Returns the number of characters in the utf-8 
