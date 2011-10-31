@@ -141,6 +141,7 @@ static size_t linelen(const char *buffer, int cols)
 #else
 		p++;
 #endif
+		len++;
 	}
 
 	/*
@@ -156,7 +157,7 @@ static size_t linelen(const char *buffer, int cols)
 	/*
 	 *	Step 2: back up to the previous space
 	 */
-	while ( (p >= buffer) && (*p > ' ')) p--;
+	while ((p >= buffer) && (*p > ' ')) p--;
 
 	if (p > buffer) return p - buffer;
 
