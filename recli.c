@@ -407,6 +407,27 @@ int main(int argc, char **argv)
 			}
 
 			c = syntax_check(config.syntax, my_argc, my_argv, &fail);
+			if ((c < 0) && (ctx_stack_ptr > 0)) {
+				int argc2;
+				char *argv2[128];
+				const char *fail2;
+				char buf2[4096];
+
+				memcpy(buf2, line, mylen + 1);
+				argc2 = str2argv(buf2, mylen, 128, argv2);
+				c = syntax_check(config.syntax, argc2, argv2,
+						 &fail2);
+				if (c <= 0) {
+					c = -1;
+					goto show_error;
+				}
+				memcpy(my_argv, argv2, sizeof(argv2[0]) * argc2);
+				my_argc = argc2;
+				c = 0;
+				goto show_error;
+			}
+
+
 			if ((c == 0) && !context) c = -1;
 			
 			if (c == 0) {
