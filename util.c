@@ -122,15 +122,20 @@ void print_argv_string(int argc, char *argv[])
 
 static size_t linelen(const char *buffer, int cols)
 {
+	size_t len;
 	const char *p;
 
+	len = 0;
 	p = buffer;
 
 	/*
 	 *	Step 1: go up "cols" characters
 	 */
 	while (*p) {
-		if ((p - buffer) >= cols) break;
+		if (len >= cols) break;
+
+		if (*p < ' ') break;
+
 #ifdef USE_UTF8
 		p += utf8_charlen((int) *p);
 #else
@@ -138,19 +143,27 @@ static size_t linelen(const char *buffer, int cols)
 #endif
 	}
 
+	/*
+	 *	Ended at a CR/LF.  Skip it, and return all of it.
+	 */
+	if (*p && (*p < ' ')) {
+		while (*p && (*p < ' ')) p++;
+		return p - buffer;
+	}
+
 	if (!*p) return p - buffer; /* short */
 
 	/*
 	 *	Step 2: back up to the previous space
 	 */
-	while ((*p != ' ') && (p >= buffer)) p--;
+	while ( (p >= buffer) && (*p > ' ')) p--;
 
 	if (p > buffer) return p - buffer;
 
 	/*
 	 *	No previous space, print the entire word.
 	 */
-	while (*p && (*p != ' ')) p++;
+	while (*p && (*p > ' ')) p++;
 
 	return p - buffer;
 }
@@ -171,7 +184,12 @@ int recli_fprintf_words(void *ctx, const char *fmt, ...)
 	p = buffer;
 	while (*p) {
 		len = linelen(p, cols - 1);
-		syntax_fprintf(ctx, "%.*s\r\n", len, p);
+		if ((len > 0) &&
+		    (p[len - 1] < ' ')) {
+			syntax_fprintf(ctx, "%.*s", len, p);
+		} else {
+			syntax_fprintf(ctx, "%.*s\r\n", len, p);
+		}
 		p += len;
 		while (*p == ' ') p++;
 	}
