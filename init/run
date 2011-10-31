@@ -1,2 +1,2 @@
 #!/bin/sh
-Echo "Running command: $*"
+echo "Running command: $*"
