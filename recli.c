@@ -358,12 +358,25 @@ int main(int argc, char **argv)
 		if (line[0] != '\0') {
 			size_t mylen = strlen(line);
 
-			if (context && (strcmp(line, "end") == 0)) {
-				if (ctx_stack_ptr > 0) {
-					ctx_stack_ptr--;
+			if (context)  {
+				if (strcmp(line, "exit") == 0) {
+					if (ctx_stack_ptr > 0) {
+						ctx_stack_ptr--;
+					}
+					if (ctx_stack_ptr == 0) prompt = config.prompt;
+					goto next_line;
 				}
-				if (ctx_stack_ptr == 0) prompt = config.prompt;
-				goto next_line;
+
+				if (strcmp(line, "end") == 0) {
+					ctx_stack_ptr = 0;
+					prompt = config.prompt;
+					goto next_line;
+				}
+
+				if ((strcmp(line, "quit") == 0) ||
+				    (strcmp(line, "logout") == 0)) {
+					exit(0);
+				}
 			}
 
 			if (mylen >= sizeof(mybuf)) {
