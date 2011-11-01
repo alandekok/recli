@@ -163,68 +163,6 @@ int foundhelp(const char *buf, size_t len, char c)
 	return 1;
 }
 
-static void runcmd(const char *rundir, int argc, char *argv[])
-{
-	int index = 0;
-	size_t out;
-	char *p, *q, buffer[8192];
-	struct stat sbuf;
-
-	if (!rundir || (argc == 0)) return;
-
-	out = snprintf(buffer, sizeof(buffer), "%s", rundir);
-
-	if (stat(buffer, &sbuf) < 0) {
-		fprintf(stderr, "Error reading rundir '%s': %s\n",
-			rundir, strerror(errno));
-		return;
-	}
-
-	p = q =  buffer + out;
-	while (argc && ((sbuf.st_mode & S_IFDIR) != 0)) {
-		out = snprintf(p, buffer + sizeof(buffer) - p, "/%s",
-			       argv[index]);
-		p += out;
-		index++;
-
-		if (stat(buffer, &sbuf) < 0) {
-			snprintf(q, sizeof(buffer) - (q - buffer), "/run");
-			if (stat(buffer, &sbuf) < 0) {
-				for (index = 0; index < argc; index++) {
-					printf("%s ", argv[index]);
-				}
-				printf("\r\n");
-				return;
-			}
-
-			index = 0;
-			goto run;
-		}
-	}
-
-	if (((sbuf.st_mode & S_IFDIR) != 0)) {
-		fprintf(stderr, "Incompletely defined '%s'\n", buffer);
-		return;
-	}
-
-run:
-	argc -= index;
-	argv += index;
-	
-	argv[argc] = NULL;
-	memmove(argv + 1, argv, sizeof(argv[0]) * argc + 1);
-	argv[0] = buffer;
-
-	printf("\r");
-
-	if (fork() == 0) {
-		execvp(buffer, argv);
-	}
-
-	waitpid(-1, NULL, 0);
-	printf("\r");
-}
-
 static int do_help(char *buffer, size_t len)
 {
 	int my_argc;
@@ -512,7 +450,9 @@ int main(int argc, char **argv)
 			linenoiseHistoryAdd(line);
 			linenoiseHistorySave("history.txt"); /* Save every new entry */
 
-			if (runit && config.dir) runcmd(config.dir, my_argc, my_argv);
+			if (runit && config.dir) {
+				recli_exec(config.dir, my_argc, my_argv);
+			}
 		}
 	next_line:
 		free(line);

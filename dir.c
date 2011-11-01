@@ -111,3 +111,68 @@ int recli_bootstrap(recli_config_t *config)
 
 	return 0;
 }
+
+int recli_exec(const char *rundir, int argc, char *argv[])
+{
+	int index = 0;
+	size_t out;
+	char *p, *q, buffer[8192];
+	struct stat sbuf;
+
+	if (!rundir || (argc == 0)) return 0;
+
+	out = snprintf(buffer, sizeof(buffer), "%s", rundir);
+
+	if (stat(buffer, &sbuf) < 0) {
+		fprintf(stderr, "Error reading rundir '%s': %s\n",
+			rundir, strerror(errno));
+		return -1;
+	}
+
+	p = q =  buffer + out;
+	while (argc && ((sbuf.st_mode & S_IFDIR) != 0)) {
+		out = snprintf(p, buffer + sizeof(buffer) - p, "/%s",
+			       argv[index]);
+		p += out;
+		index++;
+
+		if (stat(buffer, &sbuf) < 0) {
+			snprintf(q, sizeof(buffer) - (q - buffer), "/run");
+			if (stat(buffer, &sbuf) < 0) {
+				for (index = 0; index < argc; index++) {
+					printf("%s ", argv[index]);
+				}
+				printf("\r\n");
+				return -1;
+			}
+
+			index = 0;
+			goto run;
+		}
+	}
+
+	if (((sbuf.st_mode & S_IFDIR) != 0)) {
+		fprintf(stderr, "Incompletely defined '%s'\n", buffer);
+		return -1;
+	}
+
+run:
+	argc -= index;
+	argv += index;
+	
+	argv[argc] = NULL;
+	memmove(argv + 1, argv, sizeof(argv[0]) * argc + 1);
+	argv[0] = buffer;
+
+	printf("\r");
+
+	if (fork() == 0) {
+		execvp(buffer, argv);
+	}
+
+	waitpid(-1, NULL, 0);
+	printf("\r");
+
+	return 0;
+}
+

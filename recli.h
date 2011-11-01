@@ -57,3 +57,4 @@ typedef struct recli_config_t {
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);
+extern int recli_exec(const char *rundir, int argc, char *argv[]);
