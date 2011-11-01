@@ -187,9 +187,9 @@ int recli_fprintf_words(void *ctx, const char *fmt, ...)
 		len = linelen(p, cols - 1);
 		if ((len > 0) &&
 		    (p[len - 1] < ' ')) {
-			syntax_fprintf(ctx, "%.*s", len, p);
+			recli_fprintf(ctx, "%.*s", len, p);
 		} else {
-			syntax_fprintf(ctx, "%.*s\r\n", len, p);
+			recli_fprintf(ctx, "%.*s\r\n", len, p);
 		}
 		p += len;
 		while (*p == ' ') p++;
@@ -199,3 +199,23 @@ int recli_fprintf_words(void *ctx, const char *fmt, ...)
 
 	return len;
 }
+
+static int recli_fprintf_wrapper(void *ctx, const char *fmt, ...)
+{
+	int rcode;
+	va_list args;
+
+	if (!ctx) ctx = stdout;
+
+	va_start(args, fmt);
+	rcode = vfprintf(ctx, fmt, args);
+	va_end(args);
+
+	return rcode;
+}
+
+void *recli_stdout = NULL;
+void *recli_stderr = NULL;
+
+recli_fprintf_t recli_fprintf = recli_fprintf_wrapper;
+

@@ -38,26 +38,6 @@
 #include <assert.h>
 #include "recli.h"
 
-static int syntax_fprintf_wrapper(void *ctx, const char *fmt, ...)
-{
-	int rcode;
-	va_list args;
-
-	if (!ctx) ctx = stdout;
-
-	va_start(args, fmt);
-	rcode = vfprintf(ctx, fmt, args);
-	va_end(args);
-
-	return rcode;
-}
-
-void *syntax_stdout = NULL;
-void *syntax_stderr = NULL;
-
-syntax_fprintf_t syntax_fprintf = syntax_fprintf_wrapper;
-
-
 /*
  *	This file implements an abstract syntax tree based on
  *	content-addressible nodes.
@@ -341,13 +321,13 @@ finish:
 		if (num_entries == 0) return;
 
 #ifndef NDEBUG
-		syntax_fprintf(syntax_stdout, "NUM ENTRIES LEFT: %d\n", num_entries);
+		recli_fprintf(recli_stdout, "NUM ENTRIES LEFT: %d\n", num_entries);
 		for (i = 0; i < table_size; i++) {
 			if (!hash_table[i]) continue;
 
-			syntax_fprintf(syntax_stdout, "LEFT %d ", hash_table[i]->refcount);
+			recli_fprintf(recli_stdout, "LEFT %d ", hash_table[i]->refcount);
 			syntax_printf(hash_table[i]);
-			syntax_fprintf(syntax_stdout, "\n");
+			recli_fprintf(recli_stdout, "\n");
 		}
 #endif
 	}
@@ -1080,7 +1060,7 @@ void syntax_printf(const cli_syntax_t *this)
 	char buffer[8192];
 
 	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
-	syntax_fprintf(syntax_stdout, "%s", buffer);
+	recli_fprintf(recli_stdout, "%s", buffer);
 }
 
 
@@ -1097,12 +1077,12 @@ void syntax_print_lines(const cli_syntax_t *this)
 		assert(((cli_syntax_t *)this->first)->type != this->type);
 		syntax_sprintf(buffer, sizeof(buffer),
 				      this->first, CLI_TYPE_EXACT);
-		syntax_fprintf(syntax_stdout, "%s\r\n", buffer);
+		recli_fprintf(recli_stdout, "%s\r\n", buffer);
 		this = this->next;
 	}
 
 	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
-	syntax_fprintf(syntax_stdout, "%s\r\n", buffer);
+	recli_fprintf(recli_stdout, "%s\r\n", buffer);
 }
 
 
@@ -1643,19 +1623,19 @@ static int syntax_print_pre(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
-		syntax_fprintf(syntax_stdout, "<");
+		recli_fprintf(recli_stdout, "<");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		syntax_fprintf(syntax_stdout, "(");
+		recli_fprintf(recli_stdout, "(");
 		break;
 
 	case CLI_TYPE_OPTIONAL:
-		syntax_fprintf(syntax_stdout, "[");
+		recli_fprintf(recli_stdout, "[");
 		break;
 
 	case CLI_TYPE_KEY:
-		syntax_fprintf(syntax_stdout, "{");
+		recli_fprintf(recli_stdout, "{");
 		break;
 
 	default:
@@ -1672,15 +1652,15 @@ static int syntax_print_in(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
-		syntax_fprintf(syntax_stdout, "%s", (const char *)this->first);
+		recli_fprintf(recli_stdout, "%s", (const char *)this->first);
 		break;
 
 	case CLI_TYPE_CONCAT:
-		syntax_fprintf(syntax_stdout, " ");
+		recli_fprintf(recli_stdout, " ");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		syntax_fprintf(syntax_stdout, "|");
+		recli_fprintf(recli_stdout, "|");
 		break;
 
 	default:
@@ -1697,23 +1677,23 @@ static int syntax_print_post(void *ctx, cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
-		syntax_fprintf(syntax_stdout, ">");
+		recli_fprintf(recli_stdout, ">");
 		break;
 
 	case CLI_TYPE_ALTERNATE:
-		syntax_fprintf(syntax_stdout, ")");
+		recli_fprintf(recli_stdout, ")");
 		break;
 
 	case CLI_TYPE_OPTIONAL:
-		syntax_fprintf(syntax_stdout, "]");
+		recli_fprintf(recli_stdout, "]");
 		break;
 
 	case CLI_TYPE_KEY:
-		syntax_fprintf(syntax_stdout, "}");
+		recli_fprintf(recli_stdout, "}");
 		break;
 
 	case CLI_TYPE_PLUS:
-		syntax_fprintf(syntax_stdout, "+");
+		recli_fprintf(recli_stdout, "+");
 		break;
 
 	default:
@@ -2186,9 +2166,9 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 #ifndef NDEBUG
 static void syntax_debug(const char *msg, cli_syntax_t *this)
 {
-	syntax_fprintf(syntax_stdout, "%s ", msg);
+	recli_fprintf(recli_stdout, "%s ", msg);
 	syntax_printf(this);
-	syntax_fprintf(syntax_stdout, "\r\n");
+	recli_fprintf(recli_stdout, "\r\n");
 }
 #endif
 
@@ -2315,7 +2295,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 
 	fp = fopen(filename, "r");
 	if (!fp) {
-		syntax_fprintf(syntax_stderr, "Failed opening %s: %s\n",
+		recli_fprintf(recli_stderr, "Failed opening %s: %s\n",
 			filename, strerror(errno));
 		return -1;
 	}
@@ -2343,7 +2323,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 
 #ifdef USE_UTF8
 		if (!utf8_strvalid(p)) {
-			syntax_fprintf(syntax_stderr, "%s line %d: Invalid UTF-8 character in input\n",
+			recli_fprintf(recli_stderr, "%s line %d: Invalid UTF-8 character in input\n",
 				       filename, lineno);
 			syntax_free(head);
 			fclose(fp);
@@ -2352,7 +2332,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 #endif
 
 		if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
-			syntax_fprintf(syntax_stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
+			recli_fprintf(recli_stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
 				filename, lineno,
 				syntax_error_ptr, syntax_error_string);
 			syntax_free(head);
@@ -2430,7 +2410,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 	fp = fopen(filename, "r");
 	if (!fp) {
-		syntax_fprintf(syntax_stderr, "Failed opening %s: %s\n",
+		recli_fprintf(recli_stderr, "Failed opening %s: %s\n",
 			filename, strerror(errno));
 		return -1;
 	}
@@ -2449,7 +2429,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 		
 #ifdef USE_UTF8
 		if (!utf8_strvalid(p)) {
-			syntax_fprintf(syntax_stderr, "%s line %d: Invalid UTF-8 character in input \n",
+			recli_fprintf(recli_stderr, "%s line %d: Invalid UTF-8 character in input \n",
 				       filename, lineno);
 			syntax_free(head);
 			if (last) syntax_free(last);
@@ -2502,7 +2482,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 			if (!str2syntax((const char **)&q, &this, CLI_TYPE_EXACT)) {
 			error:
-				syntax_fprintf(syntax_stderr, "%s line %d: Invalid syntax \"%s\"\n",
+				recli_fprintf(recli_stderr, "%s line %d: Invalid syntax \"%s\"\n",
 					filename, lineno, buffer);
 				syntax_free(head);
 				if (last) syntax_free(last);
@@ -2533,7 +2513,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 		len = strlen(buffer);
 		if ((h + len) >= (help + sizeof(help))) {
-			syntax_fprintf(syntax_stderr, "%s line %d: Too much help text\n",
+			recli_fprintf(recli_stderr, "%s line %d: Too much help text\n",
 				filename, lineno);
 			syntax_free(head);
 			if (last) syntax_free(last);
@@ -2711,7 +2691,7 @@ show_help:
 		len = syntax_sprintf_word(buffer, sizeof(buffer),
 					  this->first);
 
-		if (len != 0) syntax_fprintf(syntax_stdout, "\t%s", buffer);
+		if (len != 0) recli_fprintf(recli_stdout, "\t%s", buffer);
 
 		this = this->next;
 	}
@@ -2722,6 +2702,6 @@ show_help:
 	len = syntax_sprintf_word(buffer, sizeof(buffer), this);
 	if (len == 0) return 0;
 	
-	syntax_fprintf(syntax_stdout, "\t%s", buffer);
+	recli_fprintf(recli_stdout, "\t%s", buffer);
 	return 1;
 }

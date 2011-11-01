@@ -195,7 +195,7 @@ static int do_help(char *buffer, size_t len)
 		if (!help) {
 			printf("\r\n");
 		} else {
-			recli_fprintf_words(syntax_stdout, "%s", help);
+			recli_fprintf_words(recli_stdout, "%s", help);
 		}
 		return 1;
 	}
@@ -227,8 +227,8 @@ int main(int argc, char **argv)
 	linenoiseSetCharacterCallback(foundquote, '\'');
 	linenoiseSetCharacterCallback(foundhelp, '?');
 
-	syntax_stdout = stdout;
-	syntax_stderr = stderr;
+	recli_stdout = stdout;
+	recli_stderr = stderr;
 
 	while ((c = getopt(argc, argv, "d:H:p:qr:s:P:X:")) != EOF) switch(c) {
 		case 'd':

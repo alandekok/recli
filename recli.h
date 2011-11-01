@@ -7,6 +7,10 @@ extern int str2argv(char *buf, size_t len, int max_argc, char *argv[]);
 extern void print_argv(int argc, char *argv[]);
 extern void print_argv_string(int argc, char *argv[]);
 extern int recli_fprintf_words(void *ctx, const char *fmt, ...);
+typedef int (*recli_fprintf_t)(void *ctx, const char *fmt, ...);
+extern void *recli_stdout;
+extern void *recli_stderr;
+extern recli_fprintf_t recli_fprintf;
 
 typedef struct cli_permission_t cli_permission_t;
 
@@ -15,10 +19,6 @@ extern int permission_parse_file(const char *filename, cli_permission_t **result
 extern void permission_free(cli_permission_t *head);
 
 typedef struct cli_syntax_t cli_syntax_t;
-typedef int (*syntax_fprintf_t)(void *ctx, const char *fmt, ...);
-extern void *syntax_stdout;
-extern void *syntax_stderr;
-extern syntax_fprintf_t syntax_fprintf;
 
 extern int syntax_parse_file(const char *filename, cli_syntax_t **);
 extern void syntax_free(cli_syntax_t *);

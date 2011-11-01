@@ -77,7 +77,7 @@ int permission_enforce(cli_permission_t *head, int argc, char *argv[])
 
 		if (!this->allowed) {
 #if 0
-			syntax_fprintf(syntax_stdout, ": Disallowed by rule %d",
+			recli_fprintf(recli_stdout, ": Disallowed by rule %d",
 				this->lineno);
 			fflush(stdout);
 #endif
@@ -137,7 +137,7 @@ int permission_parse_file(const char *filename, cli_permission_t **phead)
 
 	fp = fopen(filename, "r");
 	if (!fp) {
-		syntax_fprintf(syntax_stderr, "Failed opening %s: %s\n",
+		recli_fprintf(recli_stderr, "Failed opening %s: %s\n",
 			filename, strerror(errno));
 		return -1;
 	}
