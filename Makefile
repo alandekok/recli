@@ -1,11 +1,5 @@
 all:  recli linenoise_example linenoise_utf8_example linenoise_cpp_example
 
-RECLI_SRCS := linenoise.c recli.c util.c syntax.c permission.c datatypes.c \
-	dir.c
-
-recli: linenoise.h recli.h datatypes.h $(RECLI_SRCS)
-	$(CC) -Wall -W -g -o $@ $(RECLI_SRCS)
-
 linenoise_example: linenoise.h linenoise.c example.c
 	$(CC) -Wall -W -Os -g -o $@ linenoise.c example.c
 
@@ -25,3 +19,16 @@ check: recli
 
 push: check
 	@git push
+
+RECLI_SRCS := linenoise.c recli.c util.c syntax.c permission.c datatypes.c \
+	dir.c
+
+RECLI_OBJS := $(RECLI_SRCS:.c=.o)
+
+$(RECLI_OBJS): linenoise.h recli.h datatypes.h 
+
+%.o: %.c
+	$(CC) -Wall -W -g -c $<
+
+recli: $(RECLI_OBJS)
+
