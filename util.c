@@ -120,7 +120,7 @@ void print_argv_string(int argc, char *argv[])
 	}
 }
 
-static size_t linelen(const char *buffer, int cols)
+static size_t linelen(const char *buffer, size_t cols)
 {
 	size_t len;
 	const char *p;

@@ -419,7 +419,7 @@ int main(int argc, char **argv)
 			if (c < 0) {
 				fprintf(stderr, "%s\n", line);
 				if (fail &&
-				    (fail - my_argv[0]) < sizeof(spaces)) {
+				    ((size_t) (fail - my_argv[0]) < sizeof(spaces))) {
 					fprintf(stderr, "%.*s^ - Invalid input\n",
 						(int) (fail - my_argv[0]), spaces);
 				} else {
