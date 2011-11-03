@@ -95,7 +95,7 @@ static uint32_t fnv_hash_update(const void *data, size_t size, uint32_t hash)
 
 static cli_syntax_t *syntax_find(cli_syntax_t *this);
 #ifndef NDEBUG
-static void syntax_debug(const char *msg, cli_syntax_t *this);
+void syntax_debug(const char *msg, cli_syntax_t *this);
 #endif
 
 
@@ -1596,7 +1596,8 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	return 1;
 }
 
-static int syntax_walk(cli_syntax_t *this, int order, void *ctx,
+
+int syntax_walk(cli_syntax_t *this, int order, void *ctx,
 		       syntax_walk_t *callback)
 {
 	if (order == CLI_WALK_PREORDER) {
@@ -2164,7 +2165,7 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 
 
 #ifndef NDEBUG
-static void syntax_debug(const char *msg, cli_syntax_t *this)
+void syntax_debug(const char *msg, cli_syntax_t *this)
 {
 	recli_fprintf(recli_stdout, "%s ", msg);
 	syntax_printf(this);
@@ -2375,7 +2376,7 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 {
 	cli_syntax_t *this;
 
-	this = syntax_new(CLI_TYPE_EXACT, help, NULL);
+	this = syntax_new(CLI_TYPE_EXACT, (void *) help, NULL);
 	assert(this != NULL);
 	this->length = flag; /* internal flag... */
 
