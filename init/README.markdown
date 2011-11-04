@@ -5,7 +5,7 @@ number of configuration files in that directory:
 
 * `banner.txt`
   
-  The contents of this file are printed as a "login banner"
+  The contents of this file are printed as a "login banner" when recli first starts.
 
   When this file does not exist, no banner text is printed.
 
@@ -42,4 +42,3 @@ number of configuration files in that directory:
   The default set of permissions to apply when there is no per-user permission file.  This can be used to deny access to everyone other than authorized users.
   
   If this file contains only `!*`, i.e. no permissions at all, then recli will refuse to accept any commands users where the `DEFAULT.txt` permissions are applied.  The recli command will start, determine that the user has no permission to run any command, and immediately exit.
-
