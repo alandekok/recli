@@ -34,6 +34,11 @@ Stop a service. This is a really long one-line help text that should be auto-wra
 
 Restart a service.
 
+Restart a service. This is a really long one-line help text that should be
+auto-wrapped at 80 characters because that's the way we want it to happen.  If
+we didn't want it to wrap at 80 characters, we wouldn't have written such a
+long piece of help text.
+
 ## restart dhcpd
 
     Restart service dhcp

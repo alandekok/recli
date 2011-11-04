@@ -20,11 +20,11 @@ We can have the following long form help text:
     
     Help for "one fish" command.
 
-When the user types ``help one``, the text 'Help for the "one"
-command' is printed.  When user types ``help one fish``, the text
+When the user types `help one`, the text 'Help for the "one"
+command' is printed.  When user types `help one fish`, the text
 'Help for the "one fish" command' is printed.  Help is
-context-sensitive.  Typing ``one<ENTER>``, followed by ``help fish``
-is identical to ``help one fish``.
+context-sensitive.  Typing `one<ENTER>`, followed by `help fish`
+is identical to `help one fish`.
 
 The parser is simple.  Any line starting with a hash is a Markdown
 header, with title text.  The title is interpreted as a command which
@@ -58,11 +58,11 @@ help file parser.  One '#' is treated just the same as two or three
 
 ## Short Form Help
 
-The ``?`` character can also be used to show help.  It is different from
-the ``help`` command, in that it either prints syntax, or
+The `?` character can also be used to show help.  It is different from
+the `help` command, in that it either prints syntax, or
 contex-specific help.
 
-In the above example, the syntax is printed when the user types ``?``.
+In the above example, the syntax is printed when the user types `?`.
 Additional help can be shown by changing the help text to the following:
 
     # one
@@ -77,10 +77,10 @@ Additional help can be shown by changing the help text to the following:
 
 It may be difficult to see on an HTML formatted page, but the "Enter a
 fish" text is indented by four spaces.  This means that the text is
-help for the ``?`` character, and is not part of the text for the
-``help`` command.
+help for the `?` character, and is not part of the text for the
+`help` command.
 
-With this help file, when the user types ``one ?``, the following
+With this help file, when the user types `one ?`, the following
 output will be printed:
 
     fish: Enter a fish
