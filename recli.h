@@ -51,10 +51,12 @@ typedef struct recli_config_t {
 	const char *dir;
 	const char *prompt;
 	const char *banner;
+	char	   *envp[128];
 	cli_syntax_t *syntax;
 	cli_syntax_t *help;
 	cli_permission_t *permissions;
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);
-extern int recli_exec(const char *rundir, int argc, char *argv[]);
+extern int recli_exec(const char *rundir, int argc, char *argv[],
+		      char *const envp[]);

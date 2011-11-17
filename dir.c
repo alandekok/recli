@@ -43,6 +43,44 @@
 
 #include "recli.h"
 
+static int read_envp(const char *filename, recli_config_t *config)
+{
+	int argc;
+	FILE *fp;
+	char buffer[1024];
+
+	fp = fopen(filename, "r");
+	if (!fp) return -1;
+
+	argc = 0;
+
+	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+		char *p;
+
+		for (p = buffer; *p != '\0'; p++) {
+			if ((*p == '\n') || (*p == '\r')) {
+				*p = '\0';
+				break;
+			}
+		}
+
+		if (p == (buffer + sizeof(buffer) - 1)) {
+			return -1; /* line too long */
+		}
+
+		if (p == buffer) continue;
+
+		config->envp[argc++] = strdup(buffer);
+		if (argc >= 127) return -1;
+	}
+
+	config->envp[argc] = NULL;
+
+
+	fclose(fp);
+	return 0;  
+}
+
 int recli_bootstrap(recli_config_t *config)
 {
 	int rcode;
@@ -87,6 +125,14 @@ int recli_bootstrap(recli_config_t *config)
 		fclose(fp);
 	}
 
+	config->envp[0] = NULL;
+	snprintf(buffer, sizeof(buffer), "%s/ENV", config->dir);
+	if (stat(buffer, &statbuf) >= 0) {
+		if (read_envp(buffer, config) < 0) {
+			return -1;
+		}
+	}
+
 	if (!config->permissions) {
 		char *name = NULL;
 		struct passwd *pwd;
@@ -112,7 +158,7 @@ int recli_bootstrap(recli_config_t *config)
 	return 0;
 }
 
-int recli_exec(const char *rundir, int argc, char *argv[])
+int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 {
 	int index = 0;
 	size_t out;
@@ -167,7 +213,11 @@ run:
 	printf("\r");
 
 	if (fork() == 0) {
-		execvp(buffer, argv);
+		if (!envp || !envp[0]) {
+			execvp(buffer, argv);
+		} else {
+			execve(buffer, argv, envp);
+		}
 	}
 
 	waitpid(-1, NULL, 0);

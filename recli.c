@@ -451,7 +451,8 @@ int main(int argc, char **argv)
 			linenoiseHistorySave("history.txt"); /* Save every new entry */
 
 			if (runit && config.dir) {
-				recli_exec(config.dir, my_argc, my_argv);
+				recli_exec(config.dir, my_argc, my_argv,
+					   config.envp);
 			}
 		}
 	next_line:
