@@ -9,6 +9,14 @@ number of configuration files in that directory:
 
   When this file does not exist, no banner text is printed.
 
+* `ENV`
+
+  The contents of this file are set as environment variables for any program that is executed.  See also `run`.
+
+  When this file does not exist, the variables from the current environment are used.  Be aware that for SUID programs, this is likely to be wrong, and to create security problems.
+
+  The format of the `ENV` file is "VARIABLE=VALUE", as printed by `printenv`.  Blank lines are ignored.  Comments are not allowed.
+
 * `help.md`
   
   The help text is loaded from this file.  See HELP.markdown
