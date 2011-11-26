@@ -53,14 +53,6 @@ The above example is equivalent to the following:
 
 but it can be easier to understand.
 
-## Priority of Syntaxes
-
-The above example also introduces the concept of priority.  The
-syntaxes are checked from the start of the file to the end.  The first
-matching syntax is used.  If a syntax does not match, the subsequent
-one is checked.  The result is that more "general" syntaxes should be
-specified first, with more "specific" ones later.
-
 ## Alternate Choices
 
 Alternate choices can be specified by using round brackets and pipe
