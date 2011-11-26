@@ -154,3 +154,17 @@ Allows positive or negative integers, base 10.
 
 Allows MAC (ethernet) addresses, 6 sets of 2 hex digits, separated by
 colons.  i.e. 00:01:02:03:04:05.  Other formats cause syntax errors.
+
+See DATATYPES.markdown for more details.
+
+# Macros
+
+There are cases where the same syntax is needed in many places.  Recli
+therefore allows macros, via `NAME=syntax` format:
+
+    OPTIONS=(int INTEGER|ip IPADDR)
+    
+    add foo OPTIONS
+    del foo OPTIONS
+
+Macros make the syntax clearer and easier to write.
