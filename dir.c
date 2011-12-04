@@ -83,6 +83,110 @@ static int read_envp(const char *filename, recli_config_t *config)
 }
 
 
+typedef struct rbuf_t {
+	char buffer[8192];
+	char *start;
+	cli_syntax_t **phead;
+	recli_fprintf_t old_fprintf;
+	void *old_ctx;
+	int rcode;
+} rbuf_t;
+
+
+static rbuf_t buf_out, buf_err;
+
+static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
+{
+	int rcode;
+	char *p;
+	va_list args;
+	rbuf_t *b = ctx;
+
+	va_start(args, fmt);
+	rcode = vsnprintf(b->start, b->buffer + sizeof(b->buffer) - b->start,
+			  fmt, args);
+	va_end(args);
+
+	/*
+	 *	If we're called for stderr, dump it to the caller.
+	 */
+	if (b == &buf_err) {
+		return b->old_fprintf(b->old_ctx, "%s", b->buffer);
+	}
+
+	for (p = b->start; *p != '\0'; p++) {
+		if (!isspace((int) *p)) break;
+	}
+
+	if (!*p || isspace((int) *p)) return 0;
+
+
+	/*
+	 *	Errors go to the caller, not to us.
+	 */
+	recli_fprintf = b->old_fprintf;
+	recli_stdout = buf_out.old_ctx;
+	recli_stderr = buf_err.old_ctx;
+
+	if (syntax_merge(b->phead, b->buffer) < 0) {
+		b->rcode = -1;
+	}
+
+	recli_fprintf = recli_fprintf_syntax;
+	recli_stdout = &buf_out;
+	recli_stderr = &buf_err;
+
+	return rcode;
+}
+
+
+int recli_exec_syntax(cli_syntax_t **phead, char *program)
+{
+	int rcode = 0;
+	char *p;
+	char *argv[3];
+
+	argv[0] = program;
+	argv[1] = "--config";
+	argv[2] = "syntax";
+
+	buf_out.old_fprintf = recli_fprintf;
+	buf_out.old_ctx = recli_stdout;
+	buf_out.rcode = 0;
+	buf_out.phead = phead;
+	buf_out.start = buf_out.buffer;
+
+	buf_err.old_fprintf = recli_fprintf;
+	buf_err.old_ctx = recli_stderr;
+	buf_err.rcode = 0;
+	buf_err.phead = NULL;
+	buf_err.start = buf_err.buffer;
+
+	recli_fprintf = recli_fprintf_syntax;
+	recli_stdout = &buf_out;
+	recli_stderr = &buf_err;
+
+	strlcpy(buf_out.buffer, program, sizeof(buf_out.buffer));
+	for (p = buf_out.buffer; *p != '\0'; p++) {
+		if (*p == '/') {
+			*p = ' ';
+		}
+		p++;
+	}
+	p[0] = ' ';
+	p[1] = '\0';
+	buf_out.start = p + 1;
+
+	rcode = recli_exec("init", 3, argv, NULL);
+
+	recli_fprintf = buf_out.old_fprintf ;
+	recli_stdout = buf_out.old_ctx;
+	recli_stderr = buf_err.old_ctx;
+
+	return rcode;
+}
+
+
 int recli_bootstrap(recli_config_t *config)
 {
 	int rcode;
@@ -98,6 +202,10 @@ int recli_bootstrap(recli_config_t *config)
 		snprintf(buffer, sizeof(buffer), "%s/syntax.txt", config->dir);
 		if (syntax_parse_file(buffer, &(config->syntax)) < 0) {
 			return -1;
+		}
+
+		if (recli_exec_syntax(&config->syntax, "shit") < 0) {
+			exit(1);
 		}
 	}
 
@@ -183,6 +291,7 @@ static void nonblock(int fd)
 int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 {
 	int index = 0;
+	int status;
 	size_t out;
 	int pd[2], epd[2];
 	char *p, *q, buffer[8192];
@@ -365,12 +474,17 @@ run:
 		}
 	}
 
-	waitpid(pid, NULL, 0);
+	waitpid(pid, &status, 0);
 	recli_fprintf(recli_stdout, "\r");
+
+	index = -1;
+	if (WEXITSTATUS(status) == 0) {
+		index = 0;
+	}
 
 	if (pd[0] >= 0) close(pd[0]);
 	if (pd[0] >= 0)  close(epd[0]);
 
-	return 0;
+	return index;
 }
 

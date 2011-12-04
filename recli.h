@@ -7,6 +7,7 @@ extern int str2argv(char *buf, size_t len, int max_argc, char *argv[]);
 extern void print_argv(int argc, char *argv[]);
 extern void print_argv_string(int argc, char *argv[]);
 extern int recli_fprintf_words(void *ctx, const char *fmt, ...);
+int recli_fprintf_wrapper(void *ctx, const char *fmt, ...);
 typedef int (*recli_fprintf_t)(void *ctx, const char *fmt, ...);
 extern void *recli_stdout;
 extern void *recli_stderr;
@@ -59,5 +60,6 @@ typedef struct recli_config_t {
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);
+int recli_exec_syntax(cli_syntax_t **phead, char *program);
 extern int recli_exec(const char *rundir, int argc, char *argv[],
 		      char *const envp[]);

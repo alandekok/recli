@@ -200,7 +200,7 @@ int recli_fprintf_words(void *ctx, const char *fmt, ...)
 	return len;
 }
 
-static int recli_fprintf_wrapper(void *ctx, const char *fmt, ...)
+int recli_fprintf_wrapper(void *ctx, const char *fmt, ...)
 {
 	int rcode;
 	va_list args;
