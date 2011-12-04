@@ -160,11 +160,31 @@ int recli_bootstrap(recli_config_t *config)
 	return 0;
 }
 
+static void nonblock(int fd)
+{
+#ifdef O_NONBLOCK
+	/*
+	 *	Try to set it non-blocking.
+	 */
+	int flags;
+	
+	if ((flags = fcntl(fd, F_GETFL, NULL)) < 0)  {
+		return;
+	}
+	
+	flags |= O_NONBLOCK;
+	if (fcntl(fd, F_SETFL, flags) < 0) {
+		return;
+	}
+#endif
+}
+
+
 int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 {
 	int index = 0;
 	size_t out;
-	int pd[2];
+	int pd[2], epd[2];
 	char *p, *q, buffer[8192];
 	pid_t pid;
 	struct stat sbuf;
@@ -218,7 +238,15 @@ run:
 	recli_fprintf(recli_stdout, "\r");
 
 	if (pipe(pd) != 0) {
-		recli_fprintf(recli_stderr, "Failed opening pipe: %s\n",
+		recli_fprintf(recli_stderr, "Failed opening stdout pipe: %s\n",
+			      strerror(errno));
+		return -1;
+	}
+
+	if (pipe(epd) != 0) {
+		close(pd[0]);
+		close(pd[1]);
+		recli_fprintf(recli_stderr, "Failed opening stderr pipe: %s\n",
 			      strerror(errno));
 		return -1;
 	}
@@ -235,17 +263,20 @@ run:
 		}
 		dup2(devnull, STDIN_FILENO);
 
-		close(pd[0]);	/* reading FD */
-		if (dup2(pd[1], STDOUT_FILENO) != 1) {
-			recli_fprintf(recli_stderr, "Failed opening /dev/null: %s\n",
+		close(epd[0]);	/* reading FD */
+		if (dup2(epd[1], STDERR_FILENO) != STDERR_FILENO) {
+			recli_fprintf(recli_stderr, "Failed duping stderr: %s\n",
 				      strerror(errno));
 			exit(1);
 		}
 
-		/*
-		 *	FIXME: Later on, open two pipes.
-		 */
-		dup2(devnull, STDERR_FILENO);
+		close(pd[0]);	/* reading FD */
+		if (dup2(pd[1], STDOUT_FILENO) != STDOUT_FILENO) {
+			recli_fprintf(recli_stderr, "Failed duping stdout: %s\n",
+				      strerror(errno));
+			exit(1);
+		}
+
 		close(devnull);
 
 		/*
@@ -260,30 +291,85 @@ run:
 		exit(1);	/* if exec faild, exit. */
 	}
 
+	close(pd[1]);
+	close(epd[1]);
+
 	if (pid < 0) {
+		close(pd[0]);
+		close(epd[0]);
+
 		recli_fprintf(recli_stderr, "Failed forking program: %s\n",
 			      strerror(errno));
 		return -1;
 	}
-	close(pd[1]);
-      
-	while (1) {
-		ssize_t num;
 
-		num = read(pd[0], buffer, sizeof(buffer) - 1);
+	nonblock(pd[0]);
+	nonblock(epd[0]);
+      
+	/*
+	 *	Read from both pipes, printing one to stdout, and the
+	 *	other to stderr.
+	 */
+	while ((pd[0] >= 0) && (epd[0] >= 0)) {
+		int maxfd;
+		ssize_t num;
+		fd_set fds;
+
+		FD_ZERO(&fds);
+		if (pd[0] >= 0) FD_SET(pd[0], &fds);
+		if (pd[0] >= 0) FD_SET(epd[0], &fds);
+
+		maxfd = pd[0];
+		if (maxfd < epd[0]) maxfd = epd[0];
+		maxfd++;
+
+		num = select(maxfd,  &fds, NULL, NULL, NULL);
 		if (num == 0) break;
 		if (num < 0) {
 			if (errno == EINTR) continue;
 			break;
 		}
 
-		buffer[num] = '\0';
-		recli_fprintf(recli_stdout, "%s", buffer);
-	}
+		if ((pd[0] >= 0) && FD_ISSET(pd[0], &fds)) {
+			num = read(pd[0], buffer, sizeof(buffer) - 1);
+			if (num == 0) {
+			close_stdout:
+				close(pd[0]);
+				pd[0] = -1;
 
+			} else if (num < 0) {
+				if (errno != EINTR) goto close_stdout;
+				/* else ignore it */
+
+			} else {
+				buffer[num] = '\0';
+				recli_fprintf(recli_stdout, "%s", buffer);
+			}
+		}
+
+		if ((epd[0] >= 0) && FD_ISSET(epd[0], &fds)) {
+			num = read(epd[0], buffer, sizeof(buffer) - 1);
+			if (num == 0) {
+			close_stderr:
+				close(epd[0]);
+				epd[0] = -1;
+
+			} else if (num < 0) {
+				if (errno != EINTR) goto close_stderr;
+				/* else ignore it */
+
+			} else {
+				buffer[num] = '\0';
+				recli_fprintf(recli_stderr, "%s", buffer);
+			}
+		}
+	}
 
 	waitpid(pid, NULL, 0);
 	recli_fprintf(recli_stdout, "\r");
+
+	if (pd[0] >= 0) close(pd[0]);
+	if (pd[0] >= 0)  close(epd[0]);
 
 	return 0;
 }
