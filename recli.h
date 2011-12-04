@@ -20,6 +20,7 @@ extern void permission_free(cli_permission_t *head);
 
 typedef struct cli_syntax_t cli_syntax_t;
 
+extern int syntax_merge(cli_syntax_t **phead, char *str);
 extern int syntax_parse_file(const char *filename, cli_syntax_t **);
 extern void syntax_free(cli_syntax_t *);
 

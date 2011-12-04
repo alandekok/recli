@@ -2271,6 +2271,56 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 }
 
 
+int syntax_merge(cli_syntax_t **phead, char *str)
+{
+	char *p;
+	const char *q;
+	cli_syntax_t *this, *a;
+
+	if (!phead || !str) {
+		syntax_error(str, "Invalid parameter");
+		return -1;
+	}
+
+	p = strchr(str, '\r');
+	if (p) *p = '\0';
+	
+	p = strchr(str, '\n');
+	if (p) *p = '\0';
+	
+	p = str;
+	while (isspace((int) *p)) p++;
+	if (!*p) return 0;
+	
+	q = p;
+	
+#ifdef USE_UTF8
+	if (!utf8_strvalid(p)) {
+		syntax_error(p, "Invalid UTF-8 character");
+		return -1;
+	}
+#endif
+
+	if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
+		syntax_error(str, "Invalid syntax");
+		return -1;
+	}
+
+	if (!this) return 0;
+
+	if (!*phead) {
+		*phead = this;
+		return 0;
+	}
+
+	a = syntax_new(CLI_TYPE_ALTERNATE, *phead, this);
+	if (!a) return -1;
+
+	*phead = a;
+	return 0;
+}
+
+
 /*
  *	Parse a file into a syntax, ignoring blank lines and comments.
  */
@@ -2279,7 +2329,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	int lineno;
 	FILE *fp;
 	char buffer[1024];
-	cli_syntax_t *head, *this;
+	cli_syntax_t *head;
 
 	if (!phead) return -1;
 
@@ -2305,56 +2355,13 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	head = NULL;
 
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-		char *p;
-		const char *q;
-
 		lineno++;
 
-		p = strchr(buffer, '\r');
-		if (p) *p = '\0';
-
-		p = strchr(buffer, '\n');
-		if (p) *p = '\0';
-
-		p = buffer;
-		while (isspace((int) *p)) p++;
-		if (!*p) continue;
-
-		q = p;
-
-#ifdef USE_UTF8
-		if (!utf8_strvalid(p)) {
-			recli_fprintf(recli_stderr, "%s line %d: Invalid UTF-8 character in input\n",
-				       filename, lineno);
+		if (syntax_merge(&head, buffer) < 0) {
+			recli_fprintf(recli_stderr, "ERROR in %s line %d: %s\n",
+				      filename, lineno, syntax_error_string);
 			syntax_free(head);
-			fclose(fp);
 			return -1;
-		}
-#endif
-
-		if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
-			recli_fprintf(recli_stderr, "%s line %d: Invalid syntax at \"%s\": %s\n",
-				filename, lineno,
-				syntax_error_ptr, syntax_error_string);
-			syntax_free(head);
-			fclose(fp);
-			return -1;
-		}
-
-		if (!this) continue; /* empty line */
-
-		if (!head) {
-			head = this;
-		} else {
-			cli_syntax_t *a;
-
-			a = syntax_new(CLI_TYPE_ALTERNATE, head, this);
-			if (!a) {
-				fclose(fp);
-				return -1;
-			}
-			this = NULL;
-			head = a;
 		}
 	}
 
