@@ -35,6 +35,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <assert.h>
 
 #include <unistd.h>
@@ -81,6 +82,7 @@ static int read_envp(const char *filename, recli_config_t *config)
 	return 0;  
 }
 
+
 int recli_bootstrap(recli_config_t *config)
 {
 	int rcode;
@@ -88,7 +90,7 @@ int recli_bootstrap(recli_config_t *config)
 	char buffer[8192];
 
 	if (!config || !config->dir) {
-		fprintf(stderr, "No configuration directory\n");
+		recli_fprintf(recli_stderr, "No configuration directory\n");
 		return -1;
 	}
 
@@ -113,13 +115,13 @@ int recli_bootstrap(recli_config_t *config)
 	if (stat(buffer, &statbuf) >= 0) {
 		FILE *fp = fopen(buffer, "r");
 		if (!fp) {
-			fprintf(stderr, "Failed opening %s: %s\n",
+			recli_fprintf(recli_stderr, "Failed opening %s: %s\n",
 				buffer, strerror(errno));
 			return -1;
 		}
 
 		while (fgets(buffer, sizeof(buffer), fp)) {
-			printf("%s", buffer);
+			recli_fprintf(recli_stdout, "%s", buffer);
 		}
 
 		fclose(fp);
@@ -162,7 +164,9 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 {
 	int index = 0;
 	size_t out;
+	int pd[2];
 	char *p, *q, buffer[8192];
+	pid_t pid;
 	struct stat sbuf;
 
 	if (!rundir || (argc == 0)) return 0;
@@ -170,7 +174,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 	out = snprintf(buffer, sizeof(buffer), "%s", rundir);
 
 	if (stat(buffer, &sbuf) < 0) {
-		fprintf(stderr, "Error reading rundir '%s': %s\n",
+		recli_fprintf(recli_stderr, "Error reading rundir '%s': %s\n",
 			rundir, strerror(errno));
 		return -1;
 	}
@@ -186,9 +190,10 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 			snprintf(q, sizeof(buffer) - (q - buffer), "/run");
 			if (stat(buffer, &sbuf) < 0) {
 				for (index = 0; index < argc; index++) {
-					printf("%s ", argv[index]);
+					recli_fprintf(recli_stdout, "%s ",
+						      argv[index]);
 				}
-				printf("\r\n");
+				recli_fprintf(recli_stdout, "\r\n");
 				return -1;
 			}
 
@@ -198,7 +203,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 	}
 
 	if (((sbuf.st_mode & S_IFDIR) != 0)) {
-		fprintf(stderr, "Incompletely defined '%s'\n", buffer);
+		recli_fprintf(recli_stderr, "Incompletely defined '%s'\n", buffer);
 		return -1;
 	}
 
@@ -210,18 +215,75 @@ run:
 	memmove(argv + 1, argv, sizeof(argv[0]) * argc + 1);
 	argv[0] = buffer;
 
-	printf("\r");
+	recli_fprintf(recli_stdout, "\r");
 
-	if (fork() == 0) {
+	if (pipe(pd) != 0) {
+		recli_fprintf(recli_stderr, "Failed opening pipe: %s\n",
+			      strerror(errno));
+		return -1;
+	}
+
+	pid = fork();
+	if (pid == 0) {		/* child */
+		int devnull;
+
+		devnull = open("/dev/null", O_RDWR);
+		if (devnull < 0) {
+			recli_fprintf(recli_stderr, "Failed opening /dev/null: %s\n",
+				      strerror(errno));
+			exit(1);
+		}
+		dup2(devnull, STDIN_FILENO);
+
+		close(pd[0]);	/* reading FD */
+		if (dup2(pd[1], STDOUT_FILENO) != 1) {
+			recli_fprintf(recli_stderr, "Failed opening /dev/null: %s\n",
+				      strerror(errno));
+			exit(1);
+		}
+
+		/*
+		 *	FIXME: Later on, open two pipes.
+		 */
+		dup2(devnull, STDERR_FILENO);
+		close(devnull);
+
+		/*
+		 *	FIXME: closefrom(3)
+		 */
+
 		if (!envp || !envp[0]) {
 			execvp(buffer, argv);
 		} else {
 			execve(buffer, argv, envp);
 		}
+		exit(1);	/* if exec faild, exit. */
 	}
 
-	waitpid(-1, NULL, 0);
-	printf("\r");
+	if (pid < 0) {
+		recli_fprintf(recli_stderr, "Failed forking program: %s\n",
+			      strerror(errno));
+		return -1;
+	}
+	close(pd[1]);
+      
+	while (1) {
+		ssize_t num;
+
+		num = read(pd[0], buffer, sizeof(buffer) - 1);
+		if (num == 0) break;
+		if (num < 0) {
+			if (errno == EINTR) continue;
+			break;
+		}
+
+		buffer[num] = '\0';
+		recli_fprintf(recli_stdout, "%s", buffer);
+	}
+
+
+	waitpid(pid, NULL, 0);
+	recli_fprintf(recli_stdout, "\r");
 
 	return 0;
 }
