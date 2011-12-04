@@ -882,6 +882,17 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		return this;
 	}
 
+	/*
+	 * [[a]] = [a]
+	 */
+	if (type == CLI_TYPE_OPTIONAL) {
+		a = first;
+
+		if (a->type == CLI_TYPE_OPTIONAL) {
+			return a;
+		}
+	}
+
 	if (type != CLI_TYPE_EXACT) {
 		this = calloc(sizeof(*this), 1);
 		if (!this) return NULL;
