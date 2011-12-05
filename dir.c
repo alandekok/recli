@@ -342,6 +342,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 	char *p, *q, buffer[8192];
 	pid_t pid;
 	struct stat sbuf;
+	char *my_argv[256];
 
 	if (!rundir || (argc == 0)) return 0;
 
@@ -382,12 +383,9 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 	}
 
 run:
-	argc -= index;
-	argv += index;
-	
-	argv[argc] = NULL;
-	memmove(argv + 1, argv, sizeof(argv[0]) * argc + 1);
-	argv[0] = buffer;
+	my_argv[0] = buffer;
+	memcpy(&my_argv[1], &argv[index], sizeof(argv[0]) * (argc - index));
+	my_argv[argc - index + 1] = NULL;
 
 	recli_fprintf(recli_stdout, "\r");
 
@@ -438,17 +436,21 @@ run:
 		 */
 
 		if (!envp || !envp[0]) {
-			execvp(buffer, argv);
+			execvp(buffer, my_argv);
 		} else {
-			execve(buffer, argv, envp);
+			execve(buffer, my_argv, envp);
 		}
 		exit(1);	/* if exec faild, exit. */
 	}
 
+	assert(pd[1] >= 0);
+	assert(epd[1] >= 0);
 	close(pd[1]);
 	close(epd[1]);
 
 	if (pid < 0) {
+		assert(pd[0] >= 0);
+		assert(epd[0] >= 0);
 		close(pd[0]);
 		close(epd[0]);
 
@@ -488,6 +490,7 @@ run:
 			num = read(pd[0], buffer, sizeof(buffer) - 1);
 			if (num == 0) {
 			close_stdout:
+				assert(pd[0] >= 0);
 				close(pd[0]);
 				pd[0] = -1;
 
@@ -505,6 +508,7 @@ run:
 			num = read(epd[0], buffer, sizeof(buffer) - 1);
 			if (num == 0) {
 			close_stderr:
+				assert(epd[0] >= 0);
 				close(epd[0]);
 				epd[0] = -1;
 
