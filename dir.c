@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include <assert.h>
 
 #include <unistd.h>
@@ -115,6 +116,11 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 	}
 
 	for (p = b->start; *p != '\0'; p++) {
+		if (*p < ' ') {
+			*p = '\0';
+			break;
+		}
+
 		if (!isspace((int) *p)) break;
 	}
 
@@ -140,7 +146,7 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 }
 
 
-int recli_exec_syntax(cli_syntax_t **phead, char *program)
+int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 {
 	int rcode = 0;
 	char *p;
@@ -167,23 +173,58 @@ int recli_exec_syntax(cli_syntax_t **phead, char *program)
 	recli_stderr = &buf_err;
 
 	strlcpy(buf_out.buffer, program, sizeof(buf_out.buffer));
-	for (p = buf_out.buffer; *p != '\0'; p++) {
+	for (p = buf_out.buffer; *p; p++) {
 		if (*p == '/') {
 			*p = ' ';
 		}
-		p++;
 	}
 	p[0] = ' ';
 	p[1] = '\0';
 	buf_out.start = p + 1;
 
-	rcode = recli_exec("init", 3, argv, NULL);
+	rcode = recli_exec(dir, 3, argv, NULL);
 
 	recli_fprintf = buf_out.old_fprintf ;
 	recli_stdout = buf_out.old_ctx;
 	recli_stderr = buf_err.old_ctx;
 
 	return rcode;
+}
+
+
+int recli_load_dirs(cli_syntax_t **phead, const char *name)
+{
+	struct dirent *dp;
+	DIR *dir;
+	struct stat s;
+	char *p;
+	char buffer[8192];
+
+	dir = opendir(name);
+	if (!dir) {
+		recli_fprintf(recli_stderr, "Failed opening %s: %s\n",
+			      name, strerror(errno));
+		return -1;
+	}
+
+	while ((dp = readdir(dir)) != NULL) {
+		if (dp->d_name[0] == '.') continue;
+
+		snprintf(buffer, sizeof(buffer), "%s/%s", name, dp->d_name);
+		
+		if ((stat(buffer, &s) != 0) ||
+		    S_ISDIR(s.st_mode) ||
+		    !(S_IFREG & s.st_mode) ||
+		    !(S_IXUSR & s.st_mode)) continue;
+
+		p = strchr(dp->d_name, '~');
+		if (p) continue;
+
+		recli_exec_syntax(phead, name, dp->d_name); /* ignore errors */
+	}
+
+	closedir(dir);
+	return 0;
 }
 
 
@@ -204,9 +245,7 @@ int recli_bootstrap(recli_config_t *config)
 			return -1;
 		}
 
-		if (recli_exec_syntax(&config->syntax, "shit") < 0) {
-			exit(1);
-		}
+		recli_load_dirs(&config->syntax, config->dir);
 	}
 
 	if (!config->help) {

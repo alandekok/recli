@@ -60,6 +60,6 @@ typedef struct recli_config_t {
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);
-int recli_exec_syntax(cli_syntax_t **phead, char *program);
+int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program);
 extern int recli_exec(const char *rundir, int argc, char *argv[],
 		      char *const envp[]);
