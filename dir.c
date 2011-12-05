@@ -212,9 +212,14 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name)
 
 		snprintf(buffer, sizeof(buffer), "%s/%s", name, dp->d_name);
 		
-		if ((stat(buffer, &s) != 0) ||
-		    S_ISDIR(s.st_mode) ||
-		    !(S_IFREG & s.st_mode) ||
+		if (stat(buffer, &s) != 0) continue;
+
+		if (S_ISDIR(s.st_mode)) {
+			recli_load_dirs(phead, buffer);
+			continue;
+		}
+
+		if (!(S_IFREG & s.st_mode) ||
 		    !(S_IXUSR & s.st_mode)) continue;
 
 		p = strchr(dp->d_name, '~');
