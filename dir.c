@@ -124,7 +124,7 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 		if (!isspace((int) *p)) break;
 	}
 
-	if (!*p || isspace((int) *p)) return 0;
+	if (*p == '-') *p = '\0';
 
 
 	/*
@@ -375,7 +375,6 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 					recli_fprintf(recli_stdout, "%s ",
 						      argv[index]);
 				}
-				recli_fprintf(recli_stdout, "\r\n");
 				return -1;
 			}
 
@@ -393,8 +392,6 @@ run:
 	my_argv[0] = buffer;
 	memcpy(&my_argv[1], &argv[index], sizeof(argv[0]) * (argc - index));
 	my_argv[argc - index + 1] = NULL;
-
-	recli_fprintf(recli_stdout, "\r");
 
 	if (pipe(pd) != 0) {
 		recli_fprintf(recli_stderr, "Failed opening stdout pipe: %s\n",
@@ -533,7 +530,6 @@ run:
 	}
 
 	waitpid(pid, &status, 0);
-	recli_fprintf(recli_stdout, "\r");
 
 	index = -1;
 	if (WEXITSTATUS(status) == 0) {

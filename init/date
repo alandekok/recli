@@ -1,0 +1,15 @@
+#!/bin/sh
+
+if [ "$1" = "--config" ]
+then
+  shift
+  if [ "$1" = "syntax" ]
+  then
+    echo
+    exit 0
+   fi
+   echo "$0: Unknown option '--config $1'" >&2
+   exit 1
+fi
+
+date
