@@ -150,11 +150,12 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 {
 	int rcode = 0;
 	char *p;
-	char *argv[3];
+	char *argv[4];
 
 	argv[0] = program;
 	argv[1] = "--config";
 	argv[2] = "syntax";
+	argv[3] = NULL;
 
 	buf_out.old_fprintf = recli_fprintf;
 	buf_out.old_ctx = recli_stdout;
