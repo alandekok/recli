@@ -183,9 +183,16 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 	p[1] = '\0';
 	buf_out.start = p + 1;
 
+	/*
+	 *	Now that we have the command prefix parsed out, ensure
+	 *	that the executable we run doesn't have '/' in it.
+	 */
+	p = strchr(argv[0], '/');
+	if (p) argv[0] = p + 1;
+
 	rcode = recli_exec(dir, 3, argv, NULL);
 
-	recli_fprintf = buf_out.old_fprintf ;
+	recli_fprintf = buf_out.old_fprintf;
 	recli_stdout = buf_out.old_ctx;
 	recli_stderr = buf_err.old_ctx;
 
@@ -193,7 +200,7 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 }
 
 
-int recli_load_dirs(cli_syntax_t **phead, const char *name)
+int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip)
 {
 	struct dirent *dp;
 	DIR *dir;
@@ -216,7 +223,7 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name)
 		if (stat(buffer, &s) != 0) continue;
 
 		if (S_ISDIR(s.st_mode)) {
-			recli_load_dirs(phead, buffer);
+			recli_load_dirs(phead, buffer, skip);
 			continue;
 		}
 
@@ -226,7 +233,7 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name)
 		p = strchr(dp->d_name, '~');
 		if (p) continue;
 
-		recli_exec_syntax(phead, name, dp->d_name); /* ignore errors */
+		recli_exec_syntax(phead, name, buffer + skip + 1); /* ignore errors */
 	}
 
 	closedir(dir);
@@ -251,7 +258,7 @@ int recli_bootstrap(recli_config_t *config)
 			return -1;
 		}
 
-		recli_load_dirs(&config->syntax, config->dir);
+		recli_load_dirs(&config->syntax, config->dir, strlen(config->dir));
 	}
 
 	if (!config->help) {
@@ -440,6 +447,8 @@ run:
 		} else {
 			execve(buffer, my_argv, envp);
 		}
+		fprintf(stderr, "Failed running %s: %s\n",
+			buffer, strerror(errno));
 		exit(1);	/* if exec faild, exit. */
 	}
 
