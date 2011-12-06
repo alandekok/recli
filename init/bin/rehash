@@ -1,0 +1,21 @@
+#!/bin/sh
+
+if [ "$1" = "--config" ]
+then
+  shift
+  if [ "$1" = "syntax" ]
+  then
+    echo
+    exit 0
+   fi
+   echo "$0: Unknown option '--config $1'" >&2
+   exit 1
+fi
+
+for exe in $(find ${RECLI_DIR}/bin -type f -perm +1 | egrep -v '~')
+do
+  cmd=$(echo $exe | sed 's,\./bin/,,;s,/, ,g')
+  $exe --config syntax | sed "s/^/$cmd /" >> ${RECLI_DIR}/cache/syntax.txt.$$
+done
+mv ${RECLI_DIR}/cache/syntax.txt.$$ ${RECLI_DIR}/cache/syntax.txt
+cat ${RECLI_DIR}/cache/syntax.txt
