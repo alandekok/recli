@@ -125,7 +125,7 @@ int foundhelp(const char *buf, size_t len, char c)
 	if (in_string) return 0;
 
 	if (len == 0) {
-		printf("\r\n");
+		printf("?\r\n");
 		if (ctx_stack_ptr == 0) {
 			syntax_print_lines(config.syntax);
 			return 1;
@@ -451,8 +451,14 @@ int main(int argc, char **argv)
 			linenoiseHistorySave("history.txt"); /* Save every new entry */
 
 			if (runit && config.dir) {
-				recli_exec(config.dir, my_argc, my_argv,
+				char buffer[8192];
+
+				snprintf(buffer, sizeof(buffer), "%s/bin/",
+					 config.dir);
+
+				recli_exec(buffer, my_argc, my_argv,
 					   config.envp);
+				recli_load_syntax(&config);
 			}
 		}
 	next_line:
