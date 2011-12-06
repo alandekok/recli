@@ -274,7 +274,9 @@ int recli_load_syntax(recli_config_t *config)
 
 		config->syntax_inode = statbuf.st_ino;
 	} else {
-		if (recli_load_dirs(&head, config->dir, strlen(config->dir)) < 0) return -1;
+		snprintf(buffer, sizeof(buffer), "%s/bin/", config->dir);
+
+		if (recli_load_dirs(&head, buffer, strlen(buffer)) < 0) return -1;
 	}
 
 	if (config->syntax) syntax_free(config->syntax);
@@ -386,11 +388,11 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 
 	if (!rundir || (argc == 0)) return 0;
 
-	out = snprintf(buffer, sizeof(buffer), "%s", rundir);
+	out = snprintf(buffer, sizeof(buffer), "%s/", rundir);
 
 	if (stat(buffer, &sbuf) < 0) {
-		recli_fprintf(recli_stderr, "Error reading rundir '%s': %s\n",
-			rundir, strerror(errno));
+		recli_fprintf(recli_stderr, "Error reading '%s': %s\n",
+			buffer, strerror(errno));
 		return -1;
 	}
 
