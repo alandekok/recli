@@ -44,14 +44,18 @@
 
 #include "recli.h"
 
-static int read_envp(const char *filename, recli_config_t *config)
+static int load_envp(const char *dir, recli_config_t *config)
 {
 	int argc;
 	FILE *fp;
-	char buffer[1024];
+	char buffer[8192];
 
-	fp = fopen(filename, "r");
-	if (!fp) return -1;
+	snprintf(buffer, sizeof(buffer), "%s/ENV", dir);
+	fp = fopen(buffer, "r");
+	if (!fp) {
+		if (errno == ENOENT) return 0;
+		return -1;
+	}
 
 	argc = 0;
 
@@ -75,6 +79,8 @@ static int read_envp(const char *filename, recli_config_t *config)
 		if (argc >= 127) return -1;
 	}
 
+	snprintf(buffer, sizeof(buffer), "RECLI_DIR=%s", dir);
+	config->envp[argc++] = strdup(buffer);
 	config->envp[argc] = NULL;
 
 
@@ -318,11 +324,8 @@ int recli_bootstrap(recli_config_t *config)
 	}
 
 	config->envp[0] = NULL;
-	snprintf(buffer, sizeof(buffer), "%s/ENV", config->dir);
-	if (stat(buffer, &statbuf) >= 0) {
-		if (read_envp(buffer, config) < 0) {
-			return -1;
-		}
+	if (load_envp(config->dir, config) < 0) {
+		return -1;
 	}
 
 	if (!config->permissions) {
