@@ -1,5 +1,6 @@
 #include "linenoise.h"
 #include <stdarg.h>
+#include <sys/stat.h>
 #include "datatypes.h"
 
 extern ssize_t strquotelen(const char *str);
@@ -55,6 +56,7 @@ typedef struct recli_config_t {
 	const char *banner;
 	char	   *envp[128];
 	cli_syntax_t *syntax;
+	ino_t		syntax_inode;
 	cli_syntax_t *help;
 	cli_permission_t *permissions;
 } recli_config_t;

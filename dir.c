@@ -34,7 +34,6 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <assert.h>
@@ -241,6 +240,44 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip)
 }
 
 
+/*
+ *	Load a (possibly cached) syntax.  If the cache exists, use it
+ *	in preference to anything else.
+ *
+ *	We remember the INODE of the cached file instead of the
+ *	modification timestamp.  This is because there may be multiple
+ *	people using the same CLI.  If one updates the syntax, we want
+ *	the other one to see only the finished new version, and not
+ *	any intermediate version.  This requirement means that
+ *	updating the syntax has to be done as an atomic operation, i.e.
+ *
+ *		$ ./bin/rehash > ./cache/syntax.txt.new
+ *		$ mv ./cache/syntax.txt.new ./cache/syntax.txt
+ */
+int recli_load_syntax(recli_config_t *config)
+{
+	struct stat statbuf;
+	cli_syntax_t *head = NULL;
+	char buffer[8192];
+
+	snprintf(buffer, sizeof(buffer), "%s/cache/syntax.txt", config->dir);
+	if (stat(buffer, &statbuf) == 0) {
+		if (config->syntax_inode == statbuf.st_ino) return 0;
+
+		if (syntax_parse_file(buffer, &head) < 0) return -1;
+
+		config->syntax_inode = statbuf.st_ino;
+	} else {
+		if (recli_load_dirs(&head, config->dir, strlen(config->dir)) < 0) return -1;
+	}
+
+	if (config->syntax) syntax_free(config->syntax);
+	config->syntax = head;
+
+	return 0;
+}
+
+
 int recli_bootstrap(recli_config_t *config)
 {
 	int rcode;
@@ -252,14 +289,7 @@ int recli_bootstrap(recli_config_t *config)
 		return -1;
 	}
 
-	if (!config->syntax) {
-		snprintf(buffer, sizeof(buffer), "%s/syntax.txt", config->dir);
-		if (syntax_parse_file(buffer, &(config->syntax)) < 0) {
-			return -1;
-		}
-
-		recli_load_dirs(&config->syntax, config->dir, strlen(config->dir));
-	}
+	if (recli_load_syntax(config) < 0) return -1;
 
 	if (!config->help) {
 		snprintf(buffer, sizeof(buffer), "%s/help.md", config->dir);
