@@ -17,4 +17,9 @@ do
   cmd=$(echo $exe | sed "s,${RECLI_DIR}/bin/,,g;s,//,/,g;s,/, ,g")
   $exe --config syntax | sed "s/^/$cmd /" >> ${RECLI_DIR}/cache/syntax.txt.$$
 done
+
+#
+#  Do this as an atomic operation.  Other people may be using
+#  the CLI at the same time!x
+#
 mv ${RECLI_DIR}/cache/syntax.txt.$$ ${RECLI_DIR}/cache/syntax.txt
