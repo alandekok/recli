@@ -2,13 +2,17 @@
 
 # Figure out who we are
 name=$(echo $0 | sed 's,^.*/,,')
+
+# Set the root directory if it wasn't set in the environment
 if [ "$RECLI_DIR" = "" ]
 then
-  echo SHIT >&2
-  exit 1
+  D=`dirname "$0"`
+  B=`basename "$0"`
+  abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$B"
+  RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
 fi
 
-
+# print out configuration
 if [ "$1" = "--config" ]
 then
   shift
@@ -27,17 +31,23 @@ fi
 
 exe="${RECLI_DIR}/plugins/"
 
+# Find the correct executable
 while [ -d $exe/$1 ]
 do
     exe="$exe/$1"
     shift
 done
 
-
+# Not found... complain
 if [ ! -e $exe/$name ]
 then
-  echo "No such bin $exe/$name" >&1
+  echo "No such program $exe/$name" >&2
   exit 1
 fi
 
+# run the executable
 exec $exe/$name $*
+
+# If that didn't work, complain
+echo "Failed to run $exe/$name" >&2
+exit 1
