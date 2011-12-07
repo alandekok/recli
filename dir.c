@@ -151,7 +151,8 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 }
 
 
-int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
+int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
+		      char *const envp[])
 {
 	int rcode = 0;
 	char *p;
@@ -195,7 +196,7 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 	p = strchr(argv[0], '/');
 	if (p) argv[0] = p + 1;
 
-	rcode = recli_exec(dir, 3, argv, NULL);
+	rcode = recli_exec(dir, 3, argv, envp);
 
 	recli_fprintf = buf_out.old_fprintf;
 	recli_stdout = buf_out.old_ctx;
@@ -205,7 +206,8 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program)
 }
 
 
-int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip)
+int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip,
+		    char *const envp[])
 {
 	struct dirent *dp;
 	DIR *dir;
@@ -228,7 +230,7 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip)
 		if (stat(buffer, &s) != 0) continue;
 
 		if (S_ISDIR(s.st_mode)) {
-			recli_load_dirs(phead, buffer, skip);
+			recli_load_dirs(phead, buffer, skip, envp);
 			continue;
 		}
 
@@ -238,7 +240,8 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip)
 		p = strchr(dp->d_name, '~');
 		if (p) continue;
 
-		recli_exec_syntax(phead, name, buffer + skip + 1); /* ignore errors */
+		recli_exec_syntax(phead, name, buffer + skip + 1,
+				  envp); /* ignore errors */
 	}
 
 	closedir(dir);
@@ -276,7 +279,8 @@ int recli_load_syntax(recli_config_t *config)
 	} else {
 		snprintf(buffer, sizeof(buffer), "%s/bin/", config->dir);
 
-		if (recli_load_dirs(&head, buffer, strlen(buffer)) < 0) return -1;
+		if (recli_load_dirs(&head, buffer, strlen(buffer),
+			    config->envp) < 0) return -1;
 	}
 
 	if (config->syntax) syntax_free(config->syntax);
@@ -294,6 +298,11 @@ int recli_bootstrap(recli_config_t *config)
 
 	if (!config || !config->dir) {
 		recli_fprintf(recli_stderr, "No configuration directory\n");
+		return -1;
+	}
+
+	config->envp[0] = NULL;
+	if (load_envp(config->dir, config) < 0) {
 		return -1;
 	}
 
@@ -323,11 +332,6 @@ int recli_bootstrap(recli_config_t *config)
 		}
 
 		fclose(fp);
-	}
-
-	config->envp[0] = NULL;
-	if (load_envp(config->dir, config) < 0) {
-		return -1;
 	}
 
 	if (!config->permissions) {
