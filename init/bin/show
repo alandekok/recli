@@ -1,0 +1,43 @@
+#!/bin/sh
+
+# Figure out who we are
+name=$(echo $0 | sed 's,^.*/,,')
+if [ "$RECLI_DIR" = "" ]
+then
+  echo SHIT >&2
+  exit 1
+fi
+
+
+if [ "$1" = "--config" ]
+then
+  shift
+  if [ "$1" = "syntax" ]
+  then
+    for exe in $(find ${RECLI_DIR}/plugins -type f -perm +1 -name $name | egrep -v '~')
+    do
+      cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,/$name,,;s,//,/,g;s,/, ,g")
+      $exe --config syntax | sed "s/^/$cmd /"
+      done
+     exit 0
+  fi
+  echo "$0: Unknown option '--config $1'" >&2
+  exit 1
+fi
+
+exe="${RECLI_DIR}/plugins/"
+
+while [ -d $exe/$1 ]
+do
+    exe="$exe/$1"
+    shift
+done
+
+
+if [ ! -e $exe/$name ]
+then
+  echo "No such bin $exe/$name" >&1
+  exit 1
+fi
+
+exec $exe/$name $*
