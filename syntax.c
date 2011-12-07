@@ -1769,8 +1769,10 @@ typedef struct cli_match_t {
 
 #if 0
 #define TRACE_MATCH syntax_debug(__FUNCTION__, this)
+#define TRACE_MATCH_MSG(_x) syntax_debug(_x, this)
 #else
 #define TRACE_MATCH
+#define TRACE_MATCH_MSG(_x)
 #endif
 
 static int syntax_match_pre(void *ctx, cli_syntax_t *this)
@@ -1899,6 +1901,7 @@ static int syntax_match_in(void *ctx, cli_syntax_t *this)
 		m->found[offset].key = m->word->key;
 
 		if (m->word->match) {
+			TRACE_MATCH_MSG("MATCH");
 			assert(m->word->argc > 0);
 			m->word->argc--;
 			m->word->argv++;
@@ -2345,14 +2348,7 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	if (!phead) return -1;
 
 	if (!*phead) {
-		int i;
-
-		for (i = 0; recli_datatypes[i].name != NULL; i++) {
-			if (!syntax_parse_add(recli_datatypes[i].name,
-					      recli_datatypes[i].parse)) {
-				return -1;
-			}
-		}
+		recli_datatypes_init();
 	}
 
 	fp = fopen(filename, "r");
