@@ -129,3 +129,17 @@ recli_datatype_t recli_datatypes[] = {
 
 	{ NULL, NULL }
 };
+
+int recli_datatypes_init(void)
+{
+	int i;
+	
+	for (i = 0; recli_datatypes[i].name != NULL; i++) {
+		if (!syntax_parse_add(recli_datatypes[i].name,
+				      recli_datatypes[i].parse)) {
+			return -1;
+		}
+	}
+
+	return 0;
+}

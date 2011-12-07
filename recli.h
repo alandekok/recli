@@ -49,6 +49,7 @@ typedef struct recli_datatype_t {
 } recli_datatype_t;
 
 extern recli_datatype_t recli_datatypes[];
+extern int recli_datatypes_init(void);
 
 typedef struct recli_config_t {
 	const char *dir;
