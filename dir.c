@@ -306,6 +306,8 @@ int recli_bootstrap(recli_config_t *config)
 		return -1;
 	}
 
+	recli_datatypes_init();
+
 	if (recli_load_syntax(config) < 0) return -1;
 
 	if (!config->help) {
