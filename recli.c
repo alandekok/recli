@@ -58,14 +58,30 @@ void completion(const char *buf, linenoiseCompletions *lc)
 {
 	int i, num;
 	char *tabs[256];
+	size_t offset = 0;
+	char buffer[1024];
 
 	if (in_string) return;
+
+	if (ctx_stack_ptr > 0) {
+		char *p = buffer;
+
+		for (i = 0; i < ctx_stack_ptr; i++) {
+			strlcpy(p, ctx_stack[i].buffer,
+				sizeof(buffer) - (p - buffer));
+			p += strlen(p);
+		}
+
+		strlcpy(p, buf, sizeof(buffer) - (p - buffer));
+		offset = p - buffer;
+		buf = buffer;
+	}
 	
 	num = syntax_tab_complete(config.syntax, buf, strlen(buf), 256, tabs);
 	if (num == 0) return;
 	
 	for (i = 0; i < num; i++) {
-		linenoiseAddCompletion(lc, tabs[i]);
+		linenoiseAddCompletion(lc, tabs[i] + offset);
 		free(tabs[i]);
 	}
 }
