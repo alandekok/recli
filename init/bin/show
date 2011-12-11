@@ -13,21 +13,32 @@ then
 fi
 
 # print out configuration
-if [ "$1" = "--config" ]
-then
-  shift
-  if [ "$1" = "syntax" ]
-  then
-    for exe in $(find ${RECLI_DIR}/plugins -type f -perm +1 -name $name | egrep -v '~')
-    do
-      cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,/$name,,;s,//,/,g;s,/, ,g")
-      $exe --config syntax | sed "s/^/$cmd /"
-      done
-     exit 0
-  fi
-  echo "$0: Unknown option '--config $1'" >&2
-  exit 1
-fi
+case "$1" in
+  --config)
+    shift
+    case "$1" in
+      syntax)	  
+        for exe in $(find ${RECLI_DIR}/plugins -type f -perm +1 -name $name | egrep -v '~')
+        do
+          cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,/$name,,;s,//,/,g;s,/, ,g")
+          $exe --config syntax | sed "s/^/$cmd /"
+          done
+        exit 0
+        ;;
+
+      *)
+         echo "$0: Unknown option '--config $1'" >&2
+         exit 1
+	 ;;
+    esac
+    ;;
+
+    *)
+      echo "$0: Unknown option '$1'" >&2
+      exit 1
+      ;;
+esac
+
 
 exe="${RECLI_DIR}/plugins/"
 
