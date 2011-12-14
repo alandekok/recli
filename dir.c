@@ -91,7 +91,7 @@ static int load_envp(const char *dir, recli_config_t *config)
 
 typedef struct rbuf_t {
 	char buffer[8192];
-	char *start;
+	char *start, *append;
 	cli_syntax_t **phead;
 	recli_fprintf_t old_fprintf;
 	void *old_ctx;
@@ -109,7 +109,7 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 	rbuf_t *b = ctx;
 
 	va_start(args, fmt);
-	rcode = vsnprintf(b->start, b->buffer + sizeof(b->buffer) - b->start,
+	rcode = vsnprintf(b->append, b->buffer + sizeof(b->buffer) - b->append,
 			  fmt, args);
 	va_end(args);
 
@@ -120,7 +120,7 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 		return b->old_fprintf(b->old_ctx, "%s", b->buffer);
 	}
 
-	for (p = b->start; *p != '\0'; p++) {
+	for (p = b->append; *p != '\0'; p++) {
 		if (*p < ' ') {
 			*p = '\0';
 			break;
@@ -139,7 +139,7 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 	recli_stdout = buf_out.old_ctx;
 	recli_stderr = buf_err.old_ctx;
 
-	if (syntax_merge(b->phead, b->buffer) < 0) {
+	if (syntax_merge(b->phead, b->start) < 0) {
 		b->rcode = -1;
 	}
 
@@ -167,13 +167,13 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 	buf_out.old_ctx = recli_stdout;
 	buf_out.rcode = 0;
 	buf_out.phead = phead;
-	buf_out.start = buf_out.buffer;
+	buf_out.append = buf_out.buffer;
 
 	buf_err.old_fprintf = recli_fprintf;
 	buf_err.old_ctx = recli_stderr;
 	buf_err.rcode = 0;
 	buf_err.phead = NULL;
-	buf_err.start = buf_err.buffer;
+	buf_err.append = buf_err.buffer;
 
 	recli_fprintf = recli_fprintf_syntax;
 	recli_stdout = &buf_out;
@@ -187,7 +187,13 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 	}
 	p[0] = ' ';
 	p[1] = '\0';
-	buf_out.start = p + 1;
+
+	buf_out.append = p + 1;
+
+	buf_out.start = buf_out.buffer;
+	if (strncmp(buf_out.buffer, "DEFAULT ", 8) == 0) {
+		buf_out.start += 8;
+	}
 
 	/*
 	 *	Now that we have the command prefix parsed out, ensure
@@ -281,6 +287,11 @@ int recli_load_syntax(recli_config_t *config)
 
 		if (recli_load_dirs(&head, buffer, strlen(buffer),
 			    config->envp) < 0) return -1;
+
+		/*
+		 *	FIXME: dump syntax to syntax.cache file, and
+		 *	update cached inode.
+		 */
 	}
 
 	if (config->syntax) syntax_free(config->syntax);
