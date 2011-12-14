@@ -421,7 +421,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 		index++;
 
 		if (stat(buffer, &sbuf) < 0) {
-			snprintf(q, sizeof(buffer) - (q - buffer), "/run");
+			snprintf(q, sizeof(buffer) - (q - buffer), "/DEFAULT");
 			if (stat(buffer, &sbuf) < 0) {
 				for (index = 0; index < argc; index++) {
 					recli_fprintf(recli_stdout, "%s ",
