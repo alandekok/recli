@@ -1,5 +1,14 @@
 #!/bin/sh
 
+# Set the root directory if it wasn't set in the environment
+if [ "$RECLI_DIR" = "" ]
+then
+  D=`dirname "$0"`
+  B=`basename "$0"`
+  abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$B"
+  RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
+fi
+
 if [ "$1" = "--config" ]
 then
   shift
