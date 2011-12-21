@@ -1,14 +1,13 @@
 #!/bin/sh
 
 # Figure out who we are
-name=$(echo $0 | sed 's,^.*/,,')
+name=$(basename "$0")
 
 # Set the root directory if it wasn't set in the environment
 if [ "$RECLI_DIR" = "" ]
 then
   D=`dirname "$0"`
-  B=`basename "$0"`
-  abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$B"
+  abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$name"
   RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
 fi
 
