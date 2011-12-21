@@ -2,6 +2,7 @@
 
 # Figure out who we are
 name=$(basename "$0")
+RECLI_CMD_PREFIX=
 
 # Set the root directory if it wasn't set in the environment
 if [ "$RECLI_DIR" = "" ]
@@ -36,22 +37,25 @@ case "$1" in
       ;;
 esac
 
-
 exe="${RECLI_DIR}/plugins/"
 
-# Find the correct executable
+# Find the correct directory
 while [ -d $exe/$1 ]
 do
     exe="$exe/$1"
+    RECLI_CMD_PREFIX="$RECLI_CMD_PREFIX $1"
     shift
 done
 
-# Not found... complain
+# No executable found... complain
 if [ ! -e $exe/$name ]
 then
   echo "No such program $exe/$name" >&2
   exit 1
 fi
+
+RECLI_CMD_PREFIX="$RECLI_CMD_PREFIX $name"
+export RECLI_CMD_PREFIX
 
 # run the executable
 exec $exe/$name $*
