@@ -1,0 +1,71 @@
+#!/bin/sh
+#
+#  For commands other than "show/add/mod/del/config", run an executable.
+#
+
+RECLI_CMD_PREFIX=
+
+# Set the root directory if it wasn't set in the environment
+if [ "$RECLI_DIR" = "" ]
+then
+  D=`dirname "$0"`
+  B=`basename "$0"`
+  abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$B"
+  RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
+fi
+
+# print out configuration
+case "$1" in
+  --config)
+    shift
+    case "$1" in
+      syntax)	  
+        for exe in $(find ${RECLI_DIR}/plugins -type f -perm +1  | egrep -v '~|show|add|mod|del|config')
+        do
+          cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,//,/,g;s,/, ,g")
+          $exe --config syntax | sed "s/^/$cmd /"
+          done
+        exit 0
+        ;;
+
+      *)
+         echo "$0: Unknown option '--config $1'" >&2
+         exit 1
+	 ;;
+    esac
+    ;;
+
+    *)
+      ;;
+esac
+
+
+exe="${RECLI_DIR}/plugins/"
+
+# Find the correct directory
+while [ -d $exe/$1 ]
+do
+    exe="$exe/$1"
+    RECLI_CMD_PREFIX="$RECLI_CMD_PREFIX $1"
+    shift
+done
+
+name=$1
+shift
+
+# No executable found... complain
+if [ ! -e $exe/$name ]
+then
+  echo "No such program $exe/$name" >&2
+  exit 1
+fi
+
+RECLI_CMD_PREFIX="$RECLI_CMD_PREFIX $name"
+export RECLI_CMD_PREFIX
+
+# run the executable
+exec $exe/$name $*
+
+# If that didn't work, complain
+echo "Failed to run $exe/$name" >&2
+exit 1
