@@ -314,10 +314,14 @@ int main(int argc, char **argv)
 
 			if (context)  {
 				if (strcmp(line, "exit") == 0) {
-					if (ctx_stack_ptr > 0) {
-						ctx_stack_ptr--;
+					if (ctx_stack_ptr == 0) {
+						exit(0);
 					}
-					if (ctx_stack_ptr == 0) prompt = config.prompt;
+
+					ctx_stack_ptr--;
+					if (ctx_stack_ptr == 0) {
+						prompt = config.prompt;
+					}
 					goto next_line;
 				}
 
