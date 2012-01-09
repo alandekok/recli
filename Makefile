@@ -21,7 +21,7 @@ push: check
 	@git push
 
 RECLI_SRCS := linenoise.c recli.c util.c syntax.c permission.c datatypes.c \
-	dir.c
+	dir.c strlcpy.c
 
 RECLI_OBJS := $(RECLI_SRCS:.c=.o)
 

@@ -67,3 +67,7 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 		      char *const envp[]);
 extern int recli_exec(const char *rundir, int argc, char *argv[],
 		      char *const envp[]);
+
+#ifdef __linux__
+size_t strlcpy(char *dst, const char *src, size_t siz);
+#endif
