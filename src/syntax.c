@@ -2050,41 +2050,6 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 }
 				 
 /*
- *	Return TRUE if the syntax accepts zero input.
- */
-static int syntax_null_ok(const cli_syntax_t *this)
-{
-redo:
-	assert(this != NULL);
-
-	switch (this->type) {
-	case CLI_TYPE_KEY:
-		return 0;
-
-	case CLI_TYPE_OPTIONAL:
-		return 1;
-
-	case CLI_TYPE_CONCAT:
-		if (!syntax_null_ok(this->first)) return 0;
-		this = this->next;
-		goto redo;
-
-	case CLI_TYPE_ALTERNATE:
-		while (this->type == CLI_TYPE_ALTERNATE) {
-			if (syntax_null_ok(this->first)) return 1;
-			this = this->next;
-		}
-		goto redo;
-		
-	default:
-		break;
-	}
-
-	return 0;
-}
-
-
-/*
  *	Check argv against a syntax.
  */
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
