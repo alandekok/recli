@@ -1204,7 +1204,9 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			}
 
 			rcode = str2syntax(&p, &a, CLI_TYPE_KEY);
-			if (!rcode) return 0;
+			if (!rcode) {
+				return 0;
+			}
 
 			if (*p != '}') {
 				syntax_error(start, "No matching '}'");
@@ -2277,7 +2279,6 @@ int syntax_merge(cli_syntax_t **phead, char *str)
 #endif
 
 	if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
-		syntax_error(str, "Invalid syntax");
 		return -1;
 	}
 
@@ -2295,6 +2296,7 @@ int syntax_merge(cli_syntax_t **phead, char *str)
 	return 0;
 }
 
+static const char *spaces = "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ";
 
 /*
  *	Parse a file into a syntax, ignoring blank lines and comments.
@@ -2326,8 +2328,15 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 		lineno++;
 
 		if (syntax_merge(&head, buffer) < 0) {
+			if ((syntax_error_ptr >= buffer) &&
+			    (syntax_error_ptr < (buffer + sizeof(buffer)))) {
+				recli_fprintf(recli_stderr, "%s\n", buffer);
+				recli_fprintf(recli_stderr, "%.*s^\n",
+					      syntax_error_ptr - buffer, spaces);
+			}
 			recli_fprintf(recli_stderr, "ERROR in %s line %d: %s\n",
 				      filename, lineno, syntax_error_string);
+
 			syntax_free(head);
 			return -1;
 		}
