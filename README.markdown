@@ -45,4 +45,18 @@ anything else with the input unless you tell it to.
 
  * allow loading of syntaxes / permissions from static buffers instead of files.
 
+ * if the binary isn't named "recli", look in /etc/recli/$argv0.conf for syntax, etc.
+
+ * Add "fifo" mode.  "recli --master fifo " listens on a fifo for commands, and runs them.
+  recli --child fifo" reads syntax, etc. from the fifo.  It then writes commands to the fifo,
+  and reads results.  The syntax for the fifo should (of course) be in recli format.  Something
+  like "COMMAND ..." and "RESULT ..." for back and forth communication.  All commands should be
+  blocking on the child.
+
+  The above two features will allow recli to be used as a login shell, while there's a "master"
+  daemon on the same machine.
+
+ * Add TCP mode, so the commands get sent over a TCP connection.  We do NOT want to add SSL support.
+  That should be done via "stunnel", maybe via "inetd" mode?
+
  * more regression tests for syntaxes and permissions
