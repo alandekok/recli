@@ -28,13 +28,14 @@ Again, any of these commands are allowed.
 
 Comments can be used, and blank lines are ignored:
 
-    # allow foo ...
+    # this command does "foo" stuff, with "bar" and "baz
+    # chasers.
     foo bar baz
     
-    # and bar, too
+    # A "bar" command
     bar bad
     
-    # and hello!
+    # Cheery command.
     hello there
 
 ## Optional Parameters

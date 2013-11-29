@@ -1,6 +1,6 @@
 TESTS	:= ipaddr integer string fish aorb maybea comments many merge prefix
 
-all: ../recli
+all: ../src/recli
 	@rm -f .failed
 	@for x in $(TESTS); do \
 		./testcli.sh $$x; \
@@ -10,8 +10,8 @@ all: ../recli
 		exit 1; \
 	fi
 
-../recli: $(wildcard ../*.[ch])
-	@$(MAKE) -C .. recli
+../src/recli: $(wildcard ../src/*.[ch])
+	@$(MAKE) -C ../src recli
 
 clean:
 	@rm -f *~ *.tmp *diff .failed

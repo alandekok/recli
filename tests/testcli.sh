@@ -14,7 +14,7 @@ fi
 
 if [ -f "$1.norm" ]
 then
-  ../recli -s $SYNTAX -qX syntax > $1.tmp 2>&1
+  ../src/recli -s $SYNTAX -qX syntax > $1.tmp 2>&1
   if [ "$?" != "0" ]
   then
      echo "FAILED syntax parser: $1"
@@ -30,7 +30,7 @@ then
   fi    
 fi
 
-../recli -s $SYNTAX $PERM < $INPUT > $OUTPUT 2>&1
+../src/recli -s $SYNTAX $PERM < $INPUT > $OUTPUT 2>&1
 if [ "$?" != "0" ]
 then
    echo "FAILED running CLI: $1"
