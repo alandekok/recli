@@ -155,7 +155,7 @@ Allows positive or negative integers, base 10.
 Allows MAC (ethernet) addresses, 6 sets of 2 hex digits, separated by
 colons.  i.e. 00:01:02:03:04:05.  Other formats cause syntax errors.
 
-See DATATYPES.markdown for more details.
+See [DATATYPES.markdown](DATATYPES.markdown) for more details.
 
 # Macros
 
