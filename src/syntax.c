@@ -825,6 +825,8 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 			assert(first == a);
 			first = next;
 			next = a;
+			a = first;
+			b = next;
 		}
 		break;
 
@@ -1629,10 +1631,8 @@ int syntax_walk(cli_syntax_t *this, int order, void *ctx,
 /*
  *	Print raw syntax tree.
  */
-static int syntax_print_pre(void *ctx, cli_syntax_t *this)
+static int syntax_print_pre(UNUSED void *ctx, cli_syntax_t *this)
 {
-	ctx = ctx;		/* -Wunused */
-
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
 		recli_fprintf(recli_stdout, "<");
@@ -1658,10 +1658,8 @@ static int syntax_print_pre(void *ctx, cli_syntax_t *this)
 	return 1;
 }
 
-static int syntax_print_in(void *ctx, cli_syntax_t *this)
+static int syntax_print_in(UNUSED void *ctx, cli_syntax_t *this)
 {
-	ctx = ctx;		/* -Wunused */
-
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
 		recli_fprintf(recli_stdout, "%s", (const char *)this->first);
@@ -1683,10 +1681,8 @@ static int syntax_print_in(void *ctx, cli_syntax_t *this)
 	return 1;
 }
 
-static int syntax_print_post(void *ctx, cli_syntax_t *this)
+static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 {
-	ctx = ctx;		/* -Wunused */
-
 	switch (this->type) {
 	case CLI_TYPE_CONCAT:
 		recli_fprintf(recli_stdout, ">");
