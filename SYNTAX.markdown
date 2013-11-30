@@ -87,6 +87,33 @@ And nested:
     foo (b (d|e) | c)
     bar (b [c] | hack)
 
+## Variable arguments
+
+It is often useful to allow for a variable number of arguments to a
+command.  This can be done via the following syntax:
+
+    # allow *any* number of *any* arguments after "foo"
+    foo ...
+
+The "..." syntax is a special-case for variable argument support.
+When it is seen, it will accept absolutely any number of arguments, in
+any format, after the initial command.  There must be at least one
+command before the variable agument block.  i.e. "..." by itself is
+forbidden.
+
+It is also forbidden to use alternation or optional parameters with
+variable arguments.
+
+    # Disallowed: variable arguments in optional test
+    foo [...]
+
+    # Disallowed: there can't be alternation
+    foo (... | bar )
+
+    # Disallowed:  this is the same as above
+    foo ...
+    foo bar
+
 ## Caveats
 
 The input syntax is checked for being properly formatted.  Invalid

@@ -54,13 +54,11 @@ typedef enum cli_type_t {
 	CLI_TYPE_PLUS
 } cli_type_t;
 
-#ifdef DEBUG_PRINT
 /*
  *	Define this to get debugging about some of the operations it's
  *	doing.
  */
-#endif
-
+#define DEBUG_PRINT (0)
 
 struct cli_syntax_t {
 	cli_type_t type;
@@ -170,6 +168,18 @@ static int num_entries = 0;
 static int table_size = 0;
 static cli_syntax_t **hash_table = NULL;
 
+
+/*
+ *	Handle error messages.
+ */
+static const char *syntax_error_string = NULL;
+static const char *syntax_error_ptr = NULL;
+
+static void syntax_error(const char *p, const char *msg)
+{
+	syntax_error_ptr = p;
+	syntax_error_string = msg;
+}
 
 /*
  *	Look up a node based on content.
@@ -678,6 +688,27 @@ static cli_syntax_t *syntax_concat_prefix(cli_syntax_t *prefix, int lcp,
 }
 
 
+#if DEBUG_PRINT
+static void syntax_debug_printf(cli_type_t type, const char *msg,
+			       void *first, void *next)
+{
+	printf("{ ");
+	if ((type == CLI_TYPE_EXACT) || (type == CLI_TYPE_VARARGS)) {
+		printf("%s } %s\n", first, msg);
+		return;
+	}
+
+	syntax_printf(first);
+	printf(" } %s { ", msg);
+	syntax_printf(next);
+	printf(" }\n");
+}
+
+#define SYNTAX_DEBUG_PRINTF syntax_debug_printf
+#else
+#define SYNTAX_DEBUG_PRINTF(_a, _b, _c, _d)
+#endif
+
 /*
  *	Create a new node, ensuring normal form.
  */
@@ -688,6 +719,8 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 	cli_syntax_t *this, *a, *b, *c, *d;
 
 	memset(&find, 0, sizeof(find));
+
+	SYNTAX_DEBUG_PRINTF(type, "NEW", first, next);
 
 	switch (type) {
 	default:
@@ -711,6 +744,12 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 	optional:
 		assert(first != NULL);
 		assert(next == NULL);
+
+		if (((cli_syntax_t *)first)->type == CLI_TYPE_VARARGS) {
+			syntax_error_string = "Invalid use of ... in []";
+			syntax_free(first);
+			return NULL;
+		}
 		break;
 
 	case CLI_TYPE_ALTERNATE:
@@ -734,6 +773,18 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 			first = b;
 			next = a;
 			goto optional;
+		}
+
+		/*
+		 *	Disallow ( ... | a )
+		 *	Disallow ( a | ... )
+		 */
+		if ((a->type == CLI_TYPE_VARARGS) ||
+		    (b->type == CLI_TYPE_VARARGS)) {
+			syntax_error_string = "Invalid use of ... in alternation";
+			syntax_free(first);
+			syntax_free(next);
+			return NULL;
 		}
 
 		/*
@@ -858,13 +909,7 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		 *	concat(concat(a,b),c) ==> concat(a,concat(b,c))
 		 */
 		if (a->type == CLI_TYPE_CONCAT) {
-#ifdef DEBUG_PRINT
-			printf("{ ");
-			syntax_printf(a);
-			printf(" } CONCAT< { ");
-			syntax_printf(next);
-			printf(" }\n");
-#endif
+			SYNTAX_DEBUG_PRINTF(type, "CONCAT<", a, next);
 
 			b = a->next;
 			b->refcount++;
@@ -881,13 +926,7 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 
 		}
 
-#ifdef DEBUG_PRINT
-		printf("{ ");
-		syntax_printf(first);
-		printf(" } CONCAT { ");
-		syntax_printf(next);
-		printf(" }\n");
-#endif
+		SYNTAX_DEBUG_PRINTF(type, "CONCAT", first, next);
 		break;
 	}
 
@@ -928,6 +967,8 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		if (a->type == CLI_TYPE_OPTIONAL) {
 			return a;
 		}
+
+		assert(a->type != CLI_TYPE_VARARGS);
 	}
 
 	switch (type) {
@@ -1097,6 +1138,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		break;
 
 	default:
+		assert(0 == 1);
 		outlen = snprintf(buffer, len, "?");
 		break;
 	}
@@ -1142,18 +1184,6 @@ void syntax_print_lines(const cli_syntax_t *this)
 
 
 /*
- *	Handle error messages.
- */
-static const char *syntax_error_string = NULL;
-static const char *syntax_error_ptr = NULL;
-
-static void syntax_error(const char *p, const char *msg)
-{
-	syntax_error_ptr = p;
-	syntax_error_string = msg;
-}
-
-/*
  *	Internal "parse string into syntax"
  */
 static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
@@ -1162,6 +1192,10 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 	const char *p, *q, *start;
 	cli_syntax_t *this, *first;
 	char tmp[256];
+
+#if DEBUG_PRINT
+	printf("PARSING %s\n", *buffer);
+#endif
 
 	p = *buffer;
 	assert(*p != '\0');
@@ -1333,13 +1367,17 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 		 *	Var args
 		 */
 		if (*p == '.') {
-			if ((p[1] == '.') && (p[2] == '.') && !p[3]) {
-				this = syntax_new(CLI_TYPE_VARARGS, "...", NULL);
-				if (!this) {
-					syntax_error(start, "Failed creating ...");
-					syntax_free(first);
-					return 0;
-				}
+			if ((p[1] != '.') || (p[2] != '.') || (p[3])) {
+				syntax_error(start, "Invalid use of variable arguments");
+				syntax_free(first);
+				return 0;
+			}
+
+			this = syntax_new(CLI_TYPE_VARARGS, "...", NULL);
+			if (!this) {
+				syntax_error(start, "Failed creating ...");
+				syntax_free(first);
+				return 0;
 			}
 
 			p += 3;
@@ -2370,23 +2408,45 @@ int syntax_merge(cli_syntax_t **phead, char *str)
 #ifdef USE_UTF8
 	if (!utf8_strvalid(p)) {
 		syntax_error(p, "Invalid UTF-8 character");
+		syntax_free(*phead);
 		return -1;
 	}
 #endif
 
 	if (!str2syntax(&q, &this, CLI_TYPE_EXACT)) {
+		syntax_free(*phead);
 		return -1;
 	}
 
 	if (!this) return 0;
-
+	
 	if (!*phead) {
+#if DEBUG_PRINT
+		printf("{ ");
+		syntax_printf(this);
+		printf(" } SET\n");
+#endif
 		*phead = this;
 		return 0;
 	}
 
+#if DEBUG_PRINT
+	printf("{ ");
+	syntax_printf(*phead);
+	printf(" } MERGE { ");
+	syntax_printf(this);
+	printf(" }\n");
+#endif
+
 	a = syntax_new(CLI_TYPE_ALTERNATE, *phead, this);
-	if (!a) return -1;
+	if (!a) {
+		if (!syntax_error_string) {
+			syntax_error(str, "Syntax is incompatible with previous commands");
+		} else {
+			syntax_error_ptr = str;
+		}
+		return -1;
+	}
 
 	*phead = a;
 	return 0;
@@ -2432,8 +2492,6 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 			}
 			recli_fprintf(recli_stderr, "ERROR in %s line %d: %s\n",
 				      filename, lineno, syntax_error_string);
-
-			syntax_free(head);
 			return -1;
 		}
 	}
