@@ -53,6 +53,14 @@ typedef enum cli_type_t {
 	CLI_TYPE_PLUS
 } cli_type_t;
 
+#ifdef DEBUG_PRINT
+/*
+ *	Define this to get debugging about some of the operations it's
+ *	doing.
+ */
+#endif
+
+
 struct cli_syntax_t {
 	cli_type_t type;
 
@@ -839,6 +847,14 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		 *	concat(concat(a,b),c) ==> concat(a,concat(b,c))
 		 */
 		if (a->type == CLI_TYPE_CONCAT) {
+#ifdef DEBUG_PRINT
+			printf("{ ");
+			syntax_printf(a);
+			printf(" } CONCAT< { ");
+			syntax_printf(next);
+			printf(" }\n");
+#endif
+
 			b = a->next;
 			b->refcount++;
 			c = syntax_new(CLI_TYPE_CONCAT, b, next);
@@ -853,6 +869,14 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 			next = c;
 
 		}
+
+#ifdef DEBUG_PRINT
+		printf("{ ");
+		syntax_printf(first);
+		printf(" } CONCAT { ");
+		syntax_printf(next);
+		printf(" }\n");
+#endif
 		break;
 	}
 
