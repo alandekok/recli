@@ -45,6 +45,7 @@
 typedef enum cli_type_t {
 	CLI_TYPE_INVALID = 0,
 	CLI_TYPE_EXACT,
+	CLI_TYPE_VARARGS,
 	CLI_TYPE_KEY,
 	CLI_TYPE_OPTIONAL,
 	CLI_TYPE_CONCAT,
@@ -119,6 +120,7 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		assert(this->next == NULL);
 
 	case CLI_TYPE_MACRO:
@@ -208,8 +210,8 @@ static cli_syntax_t *syntax_ref(cli_syntax_t *this)
  */
 static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 {
-	while (a->type != CLI_TYPE_EXACT) a = a->first;
-	while (b->type != CLI_TYPE_EXACT) b = b->first;
+	while ((a->type != CLI_TYPE_EXACT) && (a->type != CLI_TYPE_VARARGS)) a = a->first;
+	while ((b->type != CLI_TYPE_EXACT) && (b->type != CLI_TYPE_VARARGS)) b = b->first;
 
 	// FIXME: type optional && key
 
@@ -288,6 +290,7 @@ redo:
 		goto redo;
 
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		assert(hash_table[this->hash & (table_size - 1)] == this);
 		hash_table[this->hash & (table_size - 1)] = NULL;
 		num_entries--;
@@ -628,6 +631,14 @@ redo:
 		return a;
 	}
 
+	/*
+	 *	Everything else is in the prefix.
+	 */
+	if (a->type == CLI_TYPE_VARARGS) {
+		a->refcount++;
+		return a;
+	}
+
 	if (a->type != CLI_TYPE_CONCAT) return NULL;
 
 	a = a->next;
@@ -687,6 +698,7 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		return NULL;
 
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		assert(next == NULL);
 
 	case CLI_TYPE_MACRO:
@@ -919,7 +931,10 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		}
 	}
 
-	if (type != CLI_TYPE_EXACT) {
+	switch (type) {
+		size_t len;
+
+	default:
 		this = calloc(sizeof(*this), 1);
 		if (!this) return NULL;
 
@@ -936,10 +951,11 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 				this->length++;
 			}
 		}
+		break;
 
-	} else {
-		size_t len = strlen((char *) first);
-		
+	case CLI_TYPE_VARARGS:
+	case CLI_TYPE_EXACT:
+		len = strlen((char *) first);		
 		assert(next == NULL);
 
 		this = calloc(sizeof(*this) + len + 1, 1);
@@ -947,6 +963,8 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 
 		this->first = this + 1;
 		memcpy(this->first, first, len + 1);
+		break;
+
 	}
 
 	this->type = type;
@@ -975,6 +993,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		outlen = snprintf(buffer, len, "%s", (char *) this->first);
 		break;
 
@@ -1311,6 +1330,23 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 
 		if (!*p) continue;
 
+		/*
+		 *	Var args
+		 */
+		if (*p == '.') {
+			if ((p[1] == '.') && (p[2] == '.') && !p[3]) {
+				this = syntax_new(CLI_TYPE_VARARGS, "...", NULL);
+				if (!this) {
+					syntax_error(start, "Failed creating ...");
+					syntax_free(first);
+					return 0;
+				}
+			}
+
+			p += 3;
+			goto next;
+		}
+
 		if ((*p > ' ') && (*p != '-') && (*p < '0') && (*p != '+')) {
 			syntax_error(start, "Invalid character");
 			syntax_free(first);
@@ -1429,6 +1465,15 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 		}
 	}
 
+	/*
+	 *	Disallow "..." all by itself.
+	 */
+	if (first && (first->type == CLI_TYPE_VARARGS)) {
+		syntax_error(start, "Variable arguments cannot be the only syntax");
+		syntax_free(first);
+		return 0;
+	}
+
 	*buffer = p;
 	*out = first;
 
@@ -1505,6 +1550,7 @@ static int syntax_prefix_words(int argc, char *argv[],
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		argv[0] = this->first;
 		return 1;
 
@@ -1584,6 +1630,7 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		if (inorder && !inorder(ctx, this)) return 0;
 		break;
 
@@ -1688,6 +1735,7 @@ static int syntax_print_in(UNUSED void *ctx, cli_syntax_t *this)
 {
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		recli_fprintf(recli_stdout, "%s", (const char *)this->first);
 		break;
 
@@ -1835,6 +1883,7 @@ static int syntax_match_pre(void *ctx, cli_syntax_t *this)
 
 	case CLI_TYPE_PLUS:
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		break;
 
 	default:
@@ -1844,6 +1893,9 @@ static int syntax_match_pre(void *ctx, cli_syntax_t *this)
 	return 1;
 }
 
+/*
+ *	Callback when we're matching in a node.
+ */
 static int syntax_match_in(void *ctx, cli_syntax_t *this)
 {
 	int offset;
@@ -1900,6 +1952,22 @@ static int syntax_match_in(void *ctx, cli_syntax_t *this)
 	case CLI_TYPE_OPTIONAL:
 		if (m->word->match) break;
 		m->word->match = 2;
+		break;
+
+	case CLI_TYPE_VARARGS:
+		/*
+		 *	Nothing more is OK.
+		 */
+		if (m->word->argc == 0) {
+			m->word->want_more = 0;
+			break;
+		}
+
+		/*
+		 *	Eat ALL of the remaining words.
+		 */
+		m->word->argv -= m->word->argc;
+		m->word->argc = 0;
 		break;
 
 	case CLI_TYPE_EXACT:
@@ -1988,6 +2056,7 @@ static int syntax_match_post(void *ctx, cli_syntax_t *this)
 		break;
 
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		break;
 
 	default:
@@ -2009,8 +2078,12 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 	assert(word != NULL);
 
 	switch (this->type) {
+	case CLI_TYPE_VARARGS:
+		this->refcount++; /* always matches */
+		goto do_concat;
+
 	case CLI_TYPE_EXACT:
-		if (this->next) {
+		if (this->next) { /* call syntax checker */
 			if (!((cli_syntax_parse_t)this->next)(word)) {
 				return NULL;
 			}
@@ -2625,6 +2698,7 @@ static size_t syntax_sprintf_word(char *buffer, size_t len, cli_syntax_t *this)
 redo:
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+	case CLI_TYPE_VARARGS:
 		if (this->length == 1) return 0;
 		return snprintf(buffer, len, "%s", (char *) this->first);
 
