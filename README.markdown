@@ -47,11 +47,39 @@ anything else with the input unless you tell it to.
 
  * if the binary isn't named "recli", look in /etc/recli/$argv0.conf for syntax, etc.
 
- * Add "fifo" mode.  "recli --master fifo " listens on a fifo for commands, and runs them.
-  recli --child fifo" reads syntax, etc. from the fifo.  It then writes commands to the fifo,
-  and reads results.  The syntax for the fifo should (of course) be in recli format.  Something
-  like "COMMAND ..." and "RESULT ..." for back and forth communication.  All commands should be
-  blocking on the child.
+ * add deamon mode
+
+    * recli --daemon /path/to/fifo (or TCP socket)
+
+    * recli --client /path/to/fifo (or TCP socket)
+
+    * Interaction is the following.  ">" means "client to server".  "<" means "server to cleint"
+
+    > get commands
+    < command blah
+    < command blah
+    < done
+    > get help
+    < help blah
+    < help blah
+    < done
+    > get permissions
+    < permission blah
+    < permission blah
+    < done
+    > get prompt
+    < prompt blah
+    < done
+
+    * Once it's boot-strapped, it prints the prompt, and waits for user input.  When it wants to run something, it sends it to the master, which responds:
+
+    > run blah blah
+    < success
+    < text blah
+    < text blah
+    < done
+
+   * Or instead of "success", "error".
 
   The above two features will allow recli to be used as a login shell, while there's a "master"
   daemon on the same machine.
@@ -60,3 +88,5 @@ anything else with the input unless you tell it to.
   That should be done via "stunnel", maybe via "inetd" mode?
 
  * more regression tests for syntaxes and permissions
+
+ * add a REST layer, so that it can convert CLI commands to REST commands.  This allows any web site REST API to be poked via a simple CLI.
