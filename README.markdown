@@ -53,31 +53,31 @@ anything else with the input unless you tell it to.
 
     * recli --client /path/to/fifo (or TCP socket)
 
-    * Interaction is the following.  ">" means "client to server".  "<" means "server to cleint"
+    * Interaction is the following.  "->" means "client to server".  "<-" means "server to cleint"
 
-    > get commands
-    < command blah
-    < command blah
-    < done
-    > get help
-    < help blah
-    < help blah
-    < done
-    > get permissions
-    < permission blah
-    < permission blah
-    < done
-    > get prompt
-    < prompt blah
-    < done
+    -> get commands
+    <- command blah
+    <- command blah
+    <- done
+    -> get help
+    <- help blah
+    <- help blah
+    <- done
+    -> get permissions
+    <- permission blah
+    <- permission blah
+    <- done
+    -> get prompt
+    <- prompt blah
+    <- done
 
     * Once it's boot-strapped, it prints the prompt, and waits for user input.  When it wants to run something, it sends it to the master, which responds:
 
-    > run blah blah
-    < success
-    < text blah
-    < text blah
-    < done
+    -> run blah blah
+    <- success
+    <- text blah
+    <- text blah
+    <- done
 
    * Or instead of "success", "error".
 
