@@ -572,7 +572,6 @@ static cli_syntax_t *syntax_new_alternate(cli_syntax_t *first,
 
 		b = syntax_new_alternate(first, next->next);
 		if (!b) {
-			syntax_free(c);
 			syntax_free(next);
 			return NULL;
 		}
