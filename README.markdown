@@ -53,7 +53,16 @@ anything else with the input unless you tell it to.
 
     * recli --client /path/to/fifo (or TCP socket)
 
-    * Interaction is the following.  "->" means "client to server".  "<-" means "server to cleint"
+ * Add TCP mode, so the commands get sent over a TCP connection.  We do NOT want to add SSL support.
+  That should be done via "stunnel", maybe via "inetd" mode?
+
+ * more regression tests for syntaxes and permissions
+
+ * add a REST layer, so that it can convert CLI commands to REST commands.  This allows any web site REST API to be poked via a simple CLI.
+
+### Client-Server spec
+
+Via the following commands
 
     -> get commands
     <- command blah
@@ -71,7 +80,7 @@ anything else with the input unless you tell it to.
     <- prompt blah
     <- done
 
-    * Once it's boot-strapped, it prints the prompt, and waits for user input.  When it wants to run something, it sends it to the master, which responds:
+Once it's boot-strapped, it prints the prompt, and waits for user input.  When it wants to run something, it sends it to the master, which responds:
 
     -> run blah blah
     <- success
@@ -79,14 +88,7 @@ anything else with the input unless you tell it to.
     <- text blah
     <- done
 
-   * Or instead of "success", "error".
+Or instead of "success", "error".
 
-  The above two features will allow recli to be used as a login shell, while there's a "master"
-  daemon on the same machine.
+The above two features will allow recli to be used as a login shell, while there's a "master" daemon on the same machine.
 
- * Add TCP mode, so the commands get sent over a TCP connection.  We do NOT want to add SSL support.
-  That should be done via "stunnel", maybe via "inetd" mode?
-
- * more regression tests for syntaxes and permissions
-
- * add a REST layer, so that it can convert CLI commands to REST commands.  This allows any web site REST API to be poked via a simple CLI.
