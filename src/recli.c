@@ -20,6 +20,13 @@ static recli_config_t config = {
 	.permissions = NULL
 };
 
+
+/*
+ *	Admins can type a partial command, in which case it's put on
+ *	the stack, and the prompt changes to include the partial
+ *	command.  We want to track these partial commands, but also
+ *	limit the size of the stack.
+ */
 typedef struct ctx_stack_t {
 	size_t len;
 	char   buffer[256];
