@@ -1,4 +1,5 @@
-TESTS	:= ipaddr integer string fish aorb maybea comments many merge prefix
+TESTS	:= ipaddr integer string fish aorb maybea comments many merge prefix \
+		varargs
 
 all: ../src/recli
 	@rm -f .failed
