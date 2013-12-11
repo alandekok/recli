@@ -137,14 +137,15 @@ int foundquote(const char *buf, size_t len, char c)
 	return 0;
 }
 
-int foundhelp(const char *buf, size_t len, char c)
+/*
+ *	Callback from linenoise when '?' is pressed.
+ */
+static int foundhelp(const char *buf, size_t len, UNUSED char c)
 {
 	int argc;
 	char *argv[256];
 	cli_syntax_t *match;
 	char mybuf[1024];
-	
-	c = c;			/* -Wunused */
 	
 	if (in_string) return 0;
 
@@ -245,6 +246,12 @@ int main(int argc, char **argv)
 #ifndef NO_COMPLETION
 	linenoiseSetCompletionCallback(completion);
 #endif
+
+	/*
+	 *	TODO: configurably load the history.
+	 *	TODO: limit the size of the history.
+	 *	TODO: rename it to ~/.recli_history?
+	 */
 	linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
 	linenoiseSetCharacterCallback(foundspace, ' ');
 	linenoiseSetCharacterCallback(foundquote, '"');
