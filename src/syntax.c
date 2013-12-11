@@ -632,7 +632,7 @@ static cli_syntax_t *syntax_new_alternate(cli_syntax_t *first,
 /*
  *	Skip "lcp" nodes of a prefix and return the suffix.
  */
-static cli_syntax_t *syntax_skip(cli_syntax_t *a, int lcp)
+cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp)
 {
 redo:
 	if (lcp == 0) {
@@ -834,8 +834,8 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		 */
 		lcp = syntax_lcp(first, next);
 		if (lcp > 0) {
-			a = syntax_skip(first, lcp);
-			b = syntax_skip(next, lcp);
+			a = syntax_skip_prefix(first, lcp);
+			b = syntax_skip_prefix(next, lcp);
 
 			d = syntax_new(CLI_TYPE_ALTERNATE, a, b);
 			if (!d) {
@@ -2249,7 +2249,7 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 
 		syntax_free(this);
 
-		this = syntax_skip(next, 1);
+		this = syntax_skip_prefix(next, 1);
 
 		assert(this != next);
 		syntax_free(next);
@@ -2332,7 +2332,7 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 			break;
 		}
 
-		this = syntax_skip(next, 1);
+		this = syntax_skip_prefix(next, 1);
 		assert(this != next);
 		syntax_free(next);
 		next = NULL;
@@ -2720,7 +2720,7 @@ const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[],
 	 *	the function returns the wrong "fail".
 	 */
 	this = syntax_match_max(head, argc, argv);
-	tail = syntax_skip(this, argc);
+	tail = syntax_skip_prefix(this, argc);
 	assert(tail != NULL);
 	syntax_free(this);
 
@@ -2820,7 +2820,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	if (!match.stack[0].want_more) return -1;
 
 	this = syntax_match_max(head, argc, argv);
-	tail = syntax_skip(this, argc);
+	tail = syntax_skip_prefix(this, argc);
 	assert(tail != NULL);
 	syntax_free(this);
 
