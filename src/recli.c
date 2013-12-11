@@ -280,7 +280,7 @@ int main(int argc, char **argv)
 			break;
 		    
 		default:
-			fprintf(stderr, "Usage: cli [-s syntax] [-X syntax]\n");
+			fprintf(stderr, "Usage: recli [-s syntax] [-X syntax]\n");
 			exit(1);
 		}
 
