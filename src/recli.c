@@ -144,7 +144,7 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 {
 	int argc;
 	char *argv[256];
-	cli_syntax_t *match;
+	cli_syntax_t *match, *suffix;
 	char mybuf[1024];
 	
 	if (in_string) return 0;
@@ -159,10 +159,19 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 		memcpy(mybuf, buf, len + 1);
 		argc = ctx2argv(mybuf, len, 256, argv);
 
+
 		match = syntax_match_max(config.syntax, argc, argv);
 		if (!match) return 1;
 
-		syntax_print_lines(match);
+		/*
+		 *	skip the prefix, or print it as something special?
+		 */
+		suffix = syntax_skip_prefix(match, argc);
+		if (!suffix) exit(1);
+
+		fprintf(recli_stdout, "... ");
+		syntax_print_lines(suffix);
+		syntax_free(suffix);
 		syntax_free(match);
 		return 1;
 	}
