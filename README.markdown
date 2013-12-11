@@ -86,9 +86,10 @@ Once it's boot-strapped, it prints the prompt, and waits for user input.  When i
     <- success
     <- text blah
     <- text blah
+    <- error blah
     <- done
 
-Or instead of "success", "error".
+Or instead of "success", "fail".  A command can potentially produce text on both stdout and stderr, so we need to distinguish the two streams.
 
 The above two features will allow recli to be used as a login shell, while there's a "master" daemon on the same machine.
 
