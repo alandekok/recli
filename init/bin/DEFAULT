@@ -64,7 +64,7 @@ RECLI_CMD_PREFIX="$RECLI_CMD_PREFIX $name"
 export RECLI_CMD_PREFIX
 
 # run the executable
-exec $exe/$name $*
+exec $exe/$name $@
 
 # If that didn't work, complain
 echo "Failed to run $exe/$name" >&2
