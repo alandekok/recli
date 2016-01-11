@@ -317,6 +317,19 @@ int main(int argc, char **argv)
 		tty = 0;
 	}
 
+	if (!config.dir) {
+		char const *p = strrchr(argv[0], '/');
+		char *q;
+
+		if (!p) p = argv[0];
+
+		if (strcmp(argv[0], "recli") != 0) {
+			q = malloc(2048);
+			snprintf(q, 2048, "/etc/recli/%s", p);
+			config.dir = q;
+		}
+	}
+
 	if (config.dir) {
 		if (recli_bootstrap(&config) < 0) {
 			exit(1);
