@@ -321,9 +321,13 @@ int main(int argc, char **argv)
 		char const *p = strrchr(argv[0], '/');
 		char *q;
 
-		if (!p) p = argv[0];
+		if (!p) {
+			p = argv[0];
+		} else {
+			p++;
+		}
 
-		if (strcmp(argv[0], "recli") != 0) {
+		if (strcmp(p, "recli") != 0) {
 			q = malloc(2048);
 			snprintf(q, 2048, "/etc/recli/%s", p);
 			config.dir = q;
