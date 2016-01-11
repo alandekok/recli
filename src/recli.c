@@ -304,7 +304,7 @@ int main(int argc, char **argv)
 			break;
 		    
 		default:
-			fprintf(stderr, "Usage: recli [-s syntax] [-X syntax]\n");
+			fprintf(stderr, "Usage: recli [-d config_dir] [-H help.md] -p [permission.txt] [-P] [-s syntax] [-X syntax]\n");
 			exit(1);
 		}
 
