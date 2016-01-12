@@ -34,6 +34,9 @@ typedef struct ctx_stack_t {
 
 #define CTX_STACK_MAX (32)
 
+static char ctx_line_full[8192];
+static char *ctx_line_end = ctx_line_full;
+
 static int ctx_stack_ptr = 0;
 static ctx_stack_t ctx_stack[CTX_STACK_MAX];
 
@@ -362,12 +365,24 @@ int main(int argc, char **argv)
 					ctx_stack_ptr--;
 					if (ctx_stack_ptr == 0) {
 						prompt = config.prompt;
+						ctx_line_end = ctx_line_full;
+					} else {
+						int i;
+						char *p;
+
+						p = ctx_line_full;
+						for (i = 0; i < ctx_stack_ptr; i++) {
+							memcpy(p, ctx_stack[i].buffer, ctx_stack[i].len);
+							p += ctx_stack[i].len;
+						}
+						ctx_line_end = p;
 					}
 					goto next_line;
 				}
 
 				if (strcmp(line, "end") == 0) {
 					ctx_stack_ptr = 0;
+					ctx_line_end = ctx_line_full;
 					prompt = config.prompt;
 					goto next_line;
 				}
@@ -457,8 +472,12 @@ int main(int argc, char **argv)
 				memcpy(ctx_stack[ctx_stack_ptr].buffer + 
 				       ctx_stack[ctx_stack_ptr].len, " ", 2);
 				ctx_stack[ctx_stack_ptr].len++;
-				prompt = "recli ...> ";
+
+				memcpy(ctx_line_end, line, ctx_stack[ctx_stack_ptr].len);
+				ctx_line_end += ctx_stack[ctx_stack_ptr].len;
+
 				ctx_stack_ptr++;
+				prompt = "recli ...> ";
 				goto next_line;
 			}
 			
@@ -508,7 +527,12 @@ int main(int argc, char **argv)
 			}
 
 		add_line:
-			linenoiseHistoryAdd(line);
+			/*
+			 *	Save the FULL text in the history.
+			 */
+			strcpy(ctx_line_end, line);
+			linenoiseHistoryAdd(ctx_line_full);
+
 			linenoiseHistorySave("history.txt"); /* Save every new entry */
 
 			if (runit && config.dir) {
