@@ -13,7 +13,7 @@ static size_t string_start = 0;
 
 static recli_config_t config = {
 	.dir = NULL,
-	.prompt = "recli> ",
+	.prompt = NULL,
 	.banner = NULL,
 	.syntax = NULL,
 	.help = NULL,
@@ -247,6 +247,7 @@ int main(int argc, char **argv)
 {
 	int c, rcode, my_argc;
 	const char *prompt = config.prompt;
+	char const *progname;
 	int quit = 0;
 	int context = 1;
 	char *line;
@@ -272,6 +273,13 @@ int main(int argc, char **argv)
 
 	recli_stdout = stdout;
 	recli_stderr = stderr;
+
+	progname = strrchr(argv[0], '/');
+	if (progname) {
+		progname++;
+	} else {
+		progname = argv[0];
+	}
 
 	while ((c = getopt(argc, argv, "d:H:p:qr:s:P:X:")) != EOF) switch(c) {
 		case 'd':
@@ -320,21 +328,23 @@ int main(int argc, char **argv)
 		tty = 0;
 	}
 
-	if (!config.dir) {
-		char const *p = strrchr(argv[0], '/');
-		char *q;
+	/*
+	 *	The default prompt is the program name.
+	 */
+	if (!config.prompt) {
+		line = malloc(256);
+		snprintf(line, 256, "%s> ", progname);
+		config.prompt = prompt = line;
+	}
 
-		if (!p) {
-			p = argv[0];
-		} else {
-			p++;
-		}
-
-		if (strcmp(p, "recli") != 0) {
-			q = malloc(2048);
-			snprintf(q, 2048, "/etc/recli/%s", p);
-			config.dir = q;
-		}
+	/*
+	 *	No config dir and we're NOT named "recli".
+	 *	Look in /etc/recli/FOO for our configuration.
+	 */
+	if (!config.dir && (strcmp(progname, "recli") != 0)) {
+		line = malloc(2048);
+		snprintf(line, 2048, "/etc/recli/%s", progname);
+		config.dir = line;
 	}
 
 	if (config.dir) {
