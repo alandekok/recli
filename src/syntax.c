@@ -224,16 +224,18 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 {
 	int order;
 
+	if (a == b) return 0;
+
 	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_EXACT)) {
 		return strcmp((char *)a->first, (char *) b->first);
 	}
 
 	if ((a->type == CLI_TYPE_VARARGS) && (b->type != CLI_TYPE_VARARGS)) {
-		return +1;
+		return -1;
 	}
 
 	if ((a->type != CLI_TYPE_VARARGS) && (b->type == CLI_TYPE_VARARGS)) {
-		return -1;
+		return +1;
 	}
 
 	if ((a->type == CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
@@ -243,21 +245,49 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 		return syntax_order(a->next, b->next);
 	}
 
-	if ((a->type == CLI_TYPE_CONCAT) && (b->type != CLI_TYPE_CONCAT)) {
-		cli_syntax_t const *c = a;
-		a = b;
-		b = c;
-	}
-
-	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_CONCAT)) {
+	if ((a->type != CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
 		order = syntax_order(a, b->first);
 		if (order != 0) return order;
-		
+
 		return -1;		/* a < b */
 	}
 
+	if ((a->type == CLI_TYPE_CONCAT) && (b->type != CLI_TYPE_CONCAT)) {
+		order = syntax_order(a->first, b);
+		if (order != 0) return order;
+
+		return +1;		/* a > b */
+	}
+
+	assert(a->type != CLI_TYPE_CONCAT);
+	assert(b->type != CLI_TYPE_CONCAT);
+
+	if (a->type == CLI_TYPE_OPTIONAL) {
+		order = syntax_order(a->first, b);
+		if (order != 0) return order;
+
+		return +1;	/* a < b */
+	}
+
+	if (b->type == CLI_TYPE_OPTIONAL) {
+		order = syntax_order(a, b->first);
+		if (order != 0) return order;
+
+		return -1;	/* a > b */
+	}
+
 	/*
-	 *	We've got to pick some order, so pick one which is at least stable.
+	 *	Simple things come before alternation.
+	 */
+	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_ALTERNATE)) return -1;
+
+	if ((a->type == CLI_TYPE_ALTERNATE) && (b->type == CLI_TYPE_EXACT)) return +1;
+
+	/*
+	 *	We've got to pick some order, so pick a stupid one.
+	 *
+	 *	FIXME: If the output changes randomly, the problem is here.
+	 *	find the case which isn't handled, and handle it.
 	 */
 	if (a < b) return -1;
 	if (a > b) return +1;
@@ -414,7 +444,7 @@ static int syntax_insert(cli_syntax_t *this)
 	}
 
 	if (this->type == CLI_TYPE_ALTERNATE) {
-//		assert(syntax_order(this->first, this->next) <= 0);
+		assert(syntax_order(this->first, this->next) <= 0);
 	}
 #endif
 
