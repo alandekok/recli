@@ -1,1 +1,1 @@
-((c|d) hello|[hello] (a|b))
+([hello] (a|b)|(c|d) hello)

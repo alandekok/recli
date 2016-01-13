@@ -105,6 +105,8 @@ static cli_syntax_t *syntax_find(cli_syntax_t *this);
 void syntax_debug(const char *msg, cli_syntax_t *this);
 #endif
 
+static cli_syntax_t *syntax_concat_prefix(cli_syntax_t *prefix, int lcp,
+					  cli_syntax_t *tail);
 
 /*
  *	Create a unique hash based on node contents.
@@ -220,17 +222,47 @@ static cli_syntax_t *syntax_ref(cli_syntax_t *this)
  */
 static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 {
-	while ((a->type != CLI_TYPE_EXACT) && (a->type != CLI_TYPE_VARARGS)) a = a->first;
-	while ((b->type != CLI_TYPE_EXACT) && (b->type != CLI_TYPE_VARARGS)) b = b->first;
+	int order;
 
-	// FIXME: type optional && key
+	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_EXACT)) {
+		return strcmp((char *)a->first, (char *) b->first);
+	}
+
+	if ((a->type == CLI_TYPE_VARARGS) && (b->type != CLI_TYPE_VARARGS)) {
+		return +1;
+	}
+
+	if ((a->type != CLI_TYPE_VARARGS) && (b->type == CLI_TYPE_VARARGS)) {
+		return -1;
+	}
+
+	if ((a->type == CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
+		order = syntax_order(a->first, b->first);
+		if (order != 0) return order;
+
+		return syntax_order(a->next, b->next);
+	}
+
+	if ((a->type == CLI_TYPE_CONCAT) && (b->type != CLI_TYPE_CONCAT)) {
+		cli_syntax_t const *c = a;
+		a = b;
+		b = c;
+	}
+
+	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_CONCAT)) {
+		order = syntax_order(a, b->first);
+		if (order != 0) return order;
+		
+		return -1;		/* a < b */
+	}
 
 	/*
-	 *	FIXME: if the first node of a concatenation is
-	 *	identical, recurse over the second one.
+	 *	We've got to pick some order, so pick one which is at least stable.
 	 */
+	if (a < b) return -1;
+	if (a > b) return +1;
 
-	return strcmp((char *)a->first, (char *) b->first);
+	return 0;
 }
 
 /*
@@ -382,7 +414,7 @@ static int syntax_insert(cli_syntax_t *this)
 	}
 
 	if (this->type == CLI_TYPE_ALTERNATE) {
-		assert(syntax_order(this->first, this->next) <= 0);
+//		assert(syntax_order(this->first, this->next) <= 0);
 	}
 #endif
 
@@ -416,7 +448,7 @@ retry:
 }
 
 
-static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next);
+static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next);
 
 
 /*
@@ -503,18 +535,10 @@ redo:
  */
 static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
 {
-	int lcp = 0;
-
 	if (a == b) {
 		if (a->type != CLI_TYPE_CONCAT) return 1;
 
-		while (a->type == CLI_TYPE_CONCAT) {
-			a = a->next;
-			lcp++;
-		}
-		lcp++;
-
-		return lcp;
+		return a->length;
 	}
 
 	if ((a->type != CLI_TYPE_CONCAT) &&
@@ -523,23 +547,43 @@ static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
 	}
 
 	if ((a->type == CLI_TYPE_CONCAT) &&
-	    (b->type == CLI_TYPE_CONCAT)) {
-		lcp = syntax_lcp(a->first, b->first);
-		if (lcp == 0) return 0;
-
-		return 1 + syntax_lcp(a->next, b->next);
-	}
-
-	if (a->type == CLI_TYPE_CONCAT) {
-		assert(b->type != CLI_TYPE_CONCAT);
+	    (b->type != CLI_TYPE_CONCAT)) {
 		if (a->first == b) return 1;
 		return 0;
 	}
 
-	assert(a->type != CLI_TYPE_CONCAT);
-	assert(b->type == CLI_TYPE_CONCAT);
-	if (b->first == a) return 1;
-	return 0;
+	if ((a->type != CLI_TYPE_CONCAT) &&
+	    (b->type == CLI_TYPE_CONCAT)) {
+		if (b->first == a) return 1;
+		return 0;
+	}
+
+	if (a->first != b->first) return 0;
+
+	return 1 + syntax_lcp(a->next, b->next);
+}
+
+static int syntax_alternate_length(cli_syntax_t *a)
+{
+	int total = 1;
+
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		total++;
+		a = a->next;
+	}
+
+	return total;
+}
+
+static void syntax_alternate_split(cli_syntax_t **out, cli_syntax_t *a)
+{
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		*out = a->first;
+		out++;
+		a = a->next;
+	}
+
+	*out = a;
 }
 
 
@@ -550,82 +594,257 @@ static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
  *	and should be better at maintaining normal form.
  *
  */
-static cli_syntax_t *syntax_new_alternate(cli_syntax_t *first,
-					  cli_syntax_t *next)
+static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 {
-	cli_syntax_t *a, *b, *c;
+	int i, j, total, total_a, total_b;
+	int lcp;
+	cli_syntax_t *c;
+	cli_syntax_t **nodes;
 
-	if (next->type != CLI_TYPE_ALTERNATE) {
-		a = first;
-		first = next;
-		next = a;
+	assert(a != NULL);
+	assert(b != NULL);
+
+	/*
+	 *	a|a ==> a
+	 */
+	if (a == b) {
+		syntax_free(a);
+		return b;
 	}
-
-	if (next->type != CLI_TYPE_ALTERNATE) {
-		return syntax_new(CLI_TYPE_ALTERNATE, first, next);
-	}
-
-	if (first->type != CLI_TYPE_ALTERNATE) {
-		/* a|a|b ==> a|b */
-		if (first == next->first) {
-			syntax_free(first);
-			return next;
-		}
-
-		/* a|b|c ==> a|b|c */
-		if (syntax_order(first, next->first) <= 0) {
-			return syntax_new(CLI_TYPE_ALTERNATE, first, next);
-		}
-
-		c = next->next;
-		c->refcount++;
-
-		b = syntax_new_alternate(first, next->next);
-		if (!b) {
-			syntax_free(next);
-			return NULL;
-		}
-
-		c = next->first;
-		c->refcount++;
-
-		a = syntax_new(CLI_TYPE_ALTERNATE, next->first, b);
-		if (!a) {
-			syntax_free(c);
-			syntax_free(next);
-			return NULL;
-		}
-		syntax_free(next);
-
-		return a;
-	}
-
-	assert(first->type == CLI_TYPE_ALTERNATE);
-	assert(next->type == CLI_TYPE_ALTERNATE);
-
-	c = first->next;
-	c->refcount++;
-
-	b = syntax_new_alternate(first->next, next);
-	if (!b) {
-		syntax_free(c);
-		syntax_free(first);
-		return NULL;
-	}
-
-	c = first->first;
-	c->refcount++;
-
-	a = syntax_new_alternate(first->first, b);
-	if (!a) {
+	/*
+	 *	Disallow ( ... | a )
+	 *	Disallow ( a | ... )
+	 */
+	if ((a->type == CLI_TYPE_VARARGS) ||
+	    (b->type == CLI_TYPE_VARARGS)) {
+		syntax_error_string = "Invalid use of ... in alternation";
+		syntax_free(a);
 		syntax_free(b);
-		syntax_free(c);
-		syntax_free(first);
 		return NULL;
 	}
-	syntax_free(first);
 
-	return a;
+	/*
+	 *	a|b ==> a|b
+	 *	b|a ==> a|b
+	 */
+	if ((a->type == CLI_TYPE_EXACT) &&
+	    (b->type == CLI_TYPE_EXACT)) {
+	create:
+		if (syntax_order(a, b) > 0) {
+			c = a;
+			a = b;
+			b = c;
+		}
+		return syntax_alloc(CLI_TYPE_ALTERNATE, a, b);
+	}
+
+	/*
+	 *	(a b|a c) ==> a (b|c)
+	 */
+	lcp = syntax_lcp(a, b);
+	if (lcp > 0) {
+		cli_syntax_t *d, *e, *f;
+
+		d = syntax_skip_prefix(a, lcp);
+		e = syntax_skip_prefix(b, lcp);
+
+		if (!d) {
+			f = syntax_alloc(CLI_TYPE_OPTIONAL, e, NULL);
+			assert(f != NULL);
+
+		} else if (!e) {
+			f = syntax_alloc(CLI_TYPE_OPTIONAL, d, NULL);
+			assert(f != NULL);
+
+		} else {
+			f = syntax_alternate(d, e);
+			assert(f != NULL);
+		}
+
+		c = syntax_concat_prefix(a, lcp, f);
+		assert(c != NULL);
+
+		syntax_free(a);
+		syntax_free(b);
+		return c;
+	}
+
+	/*
+	 *	(a foo|b foo) ==> (a|b) foo
+	 */
+	c = syntax_lcs(a, b);
+	if (c) {
+		int lcp;
+		cli_syntax_t *d, *e, *f;
+
+		if (a != c) {
+			lcp = syntax_prefix_length(a, c);
+			assert(lcp > 0);
+			d = syntax_concat_prefix(a, lcp, NULL);
+			assert(d != NULL);
+		} else {
+			/*
+			 *	a | b a = [b] a
+			 */
+			d = NULL;
+		}
+
+		if (b != c) {
+			lcp = syntax_prefix_length(b, c);
+			assert(lcp > 0);
+			e = syntax_concat_prefix(b, lcp, NULL);
+			assert(e != NULL);
+		} else {
+			assert(d != NULL);
+
+			/*
+			 *	a b | b = [a] b
+			 */
+ 			e = NULL;
+		}
+
+		if (!d) {
+			assert(e != NULL);
+			f = syntax_alloc(CLI_TYPE_OPTIONAL, e, NULL);
+
+		} else if (!e) {
+			assert(d != NULL);
+			f = syntax_alloc(CLI_TYPE_OPTIONAL, d, NULL);
+
+		} else {
+			f = syntax_alternate(d, e);
+			assert(f != NULL);
+		}
+
+		syntax_free(a);
+		syntax_free(b);
+
+		return syntax_alloc(CLI_TYPE_CONCAT, f, c);
+	}
+
+	/*
+	 *	Anything else, just create the node.
+	 */
+	if ((a->type != CLI_TYPE_ALTERNATE) &&
+	    (b->type != CLI_TYPE_ALTERNATE)) {
+		goto create;
+	}
+
+	if ((a->type == CLI_TYPE_ALTERNATE) &&
+	    (b->type != CLI_TYPE_ALTERNATE)) {
+		c = a;
+		a = b;
+		b = c;
+	}
+
+	/*
+	 *	a | (b|c) gets checked recursively.
+	 *
+	 *	We assume that (b|c) is in normal form.
+	 */
+	if ((a->type != CLI_TYPE_ALTERNATE) &&
+	    (b->type == CLI_TYPE_ALTERNATE)) {
+		cli_syntax_t *d;
+
+		/*
+		 *	Enforce order on the lists.
+		 */
+		if (syntax_order(a, b->first) > 0) {
+			c = syntax_alternate(syntax_ref(b->next), a);
+			d = syntax_alloc(CLI_TYPE_ALTERNATE, syntax_ref(b->first), c);
+			syntax_free(b);
+			return d;
+		}
+
+		/*
+		 *	a | (b | c) ==> (a | b) | c
+		 *
+		 *	But only if (a|b) has a common suffix / prefix.
+		 */
+		c = syntax_alternate(syntax_ref(a), syntax_ref(b->first));
+		if (c->type != CLI_TYPE_ALTERNATE) {
+			d = syntax_alloc(CLI_TYPE_ALTERNATE, c, syntax_ref(b->next));
+			syntax_free(a);
+			syntax_free(b);
+			return d;
+		}
+		syntax_free(c);
+
+		/*
+		 *	a | (b | c) ==> a | (b | c)
+		 *
+		 *	When  a < b and lcs(a,b) == 0, and lcp(a, b) == 0
+		 */
+		return syntax_alloc(CLI_TYPE_ALTERNATE, a, b);
+	}
+
+	/*
+	 *	Both nodes are alternation.  Break them apart, sort
+	 *	them, and put them back together.
+	 */
+	total_a = syntax_alternate_length(a);
+	assert(total_a > 1);
+	total_b = syntax_alternate_length(b);
+	assert(total_b > 1);
+
+
+	total = total_a + total_b;
+	nodes = calloc(total * sizeof(nodes[0]), 1);
+	assert(nodes != NULL);
+
+	syntax_alternate_split(nodes, a);
+	syntax_alternate_split(&nodes[total_a], b);
+
+	/*
+	 *	Bubble sort FTW.
+	 */
+	for (i = 0; i < (total - 1); i++) {
+		if (!nodes[i]) continue;
+
+		for (j = i + 1; j < total; j++) {
+			int order;
+
+			if (!nodes[j]) continue;
+
+			if (nodes[i] == nodes[j]) {
+				nodes[j] = NULL;
+				continue;
+			}
+
+			order = syntax_order(nodes[i], nodes[j]);
+			if (order > 0) {
+				c = nodes[i];
+				nodes[i] = nodes[j];
+				nodes[j] = c;
+			}
+		}
+	}
+
+	c = NULL;
+
+	/*
+	 *	Concatenate all of them from the back up.
+	 */
+	for (i = total - 1; i >= 0; i--) {
+		cli_syntax_t *d;
+
+		if (!nodes[i]) continue;
+
+		if (!c) {
+			c = syntax_ref(nodes[i]);
+			continue;
+		}
+
+		d = syntax_alloc(CLI_TYPE_ALTERNATE, syntax_ref(nodes[i]), c);
+		assert(d != NULL);
+
+		c = d;
+	}
+
+	syntax_free(a);
+	syntax_free(b);
+
+	return c;
 }
 
 
@@ -634,25 +853,33 @@ static cli_syntax_t *syntax_new_alternate(cli_syntax_t *first,
  */
 cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp)
 {
-redo:
+	/*
+	 *	Don't skip anything == return ourselves.
+	 */
 	if (lcp == 0) {
 		a->refcount++;
 		return a;
 	}
 
 	/*
-	 *	Everything else is in the prefix.
+	 *	Nothing after this, return nothing.
 	 */
-	if (a->type == CLI_TYPE_VARARGS) {
-		a->refcount++;
-		return a;
+	if (a->type != CLI_TYPE_CONCAT) {
+		assert(lcp == 1);
+		return NULL;
 	}
 
-	if (a->type != CLI_TYPE_CONCAT) return NULL;
+	assert(lcp <= a->length);
 
-	a = a->next;
-	lcp--;
-	goto redo;
+	if (lcp == a->length) return NULL;
+
+	while (lcp) {
+		a = a->next;
+		lcp--;
+	}
+
+	a->refcount++;
+	return a;
 }
 
 
@@ -678,12 +905,12 @@ static cli_syntax_t *syntax_concat_prefix(cli_syntax_t *prefix, int lcp,
 	if (lcp == 1) {
 		if (!tail) return a;
 
-		return syntax_new(CLI_TYPE_CONCAT, a, tail);
+		return syntax_alloc(CLI_TYPE_CONCAT, a, tail);
 	}
 
 	assert(b != NULL);
 
-	return syntax_new(CLI_TYPE_CONCAT, a,
+	return syntax_alloc(CLI_TYPE_CONCAT, a,
 			  syntax_concat_prefix(b, lcp - 1, tail));
 }
 
@@ -710,13 +937,12 @@ static void syntax_debug_printf(cli_type_t type, const char *msg,
 #endif
 
 /*
- *	Create a new node, ensuring normal form.
+ *	Allocate a new node.  Ignoring normal form.
  */
-static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
+static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 {
-	int lcp;
 	cli_syntax_t find;
-	cli_syntax_t *this, *a, *b, *c, *d;
+	cli_syntax_t *this, *a, *b, *c;
 
 	memset(&find, 0, sizeof(find));
 
@@ -741,7 +967,6 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
 	case CLI_TYPE_PLUS:
-	optional:
 		assert(first != NULL);
 		assert(next == NULL);
 
@@ -752,152 +977,10 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 		}
 		break;
 
+		/*
+		 *	Only syntax_alternate() should be calling us here.
+		 */
 	case CLI_TYPE_ALTERNATE:
-		/*
-		 *	a|a ==> a
-		 */
-		if (first == next) {
-			syntax_free(first);
-			return next;
-		}
-
-		a = first;
-		b = next;
-
-		if (!next) {
-			type = CLI_TYPE_OPTIONAL;
-			goto optional;
-		}
-		if (!first) {
-			type = CLI_TYPE_OPTIONAL;
-			first = b;
-			next = a;
-			goto optional;
-		}
-
-		/*
-		 *	Disallow ( ... | a )
-		 *	Disallow ( a | ... )
-		 */
-		if ((a->type == CLI_TYPE_VARARGS) ||
-		    (b->type == CLI_TYPE_VARARGS)) {
-			syntax_error_string = "Invalid use of ... in alternation";
-			syntax_free(first);
-			syntax_free(next);
-			return NULL;
-		}
-
-		/*
-		 *	(a foo|b foo) ==> (a|b) foo
-		 */
-		c = syntax_lcs(a, b);
-		if (c) {
-			cli_syntax_t *e, *f;
-
-			if (a != c) {
-				lcp = syntax_prefix_length(a, c);
-				assert(lcp > 0);
-				d = syntax_concat_prefix(a, lcp, NULL);
-				if (!d) assert(0 == 1);
-			} else {
-				d = NULL;
-			}
-
-			if (b != c) {
-				lcp = syntax_prefix_length(b, c);
-				assert(lcp > 0);
-				e = syntax_concat_prefix(b, lcp, NULL);
-				if (!e) assert(0 == 1);
-			} else {
-				e = NULL;
-			}
-
-			f = syntax_new(CLI_TYPE_ALTERNATE, d, e);
-			if (!f) assert(0 == 1);
-
-			syntax_free(first);
-			syntax_free(next);
-
-			return syntax_new(CLI_TYPE_CONCAT, f, c);
-		}
-
-		if ((a->type == CLI_TYPE_ALTERNATE) &&
-		    (b->type != CLI_TYPE_ALTERNATE)) {
-			first = b;
-			next = a;
-			a = first;
-			b = next;
-		}
-
-		/*
-		 *	(a b|a c) ==> a (b|c)
-		 */
-		lcp = syntax_lcp(first, next);
-		if (lcp > 0) {
-			a = syntax_skip_prefix(first, lcp);
-			b = syntax_skip_prefix(next, lcp);
-
-			d = syntax_new(CLI_TYPE_ALTERNATE, a, b);
-			if (!d) {
-				syntax_free(first);
-				syntax_free(next);
-				return NULL;
-			}
-
-			c = syntax_concat_prefix(first, lcp, d);
-			syntax_free(first);
-			syntax_free(next);
-			if (!c) {
-				syntax_free(d);
-				return NULL;
-			}
-			return c;
-		}
-
-		assert(a != b);
-
-		/*
-		 *	b|(a|c) ==> a|(b|c)
-		 */
-		if ((a->type == CLI_TYPE_ALTERNATE) ||
-		    ((b->type == CLI_TYPE_ALTERNATE) &&
-		     (syntax_order(a, b) > 0))) {
-			return syntax_new_alternate(first, next);
-		}
-
-		/*
-		 *	(a b|(a c|d)) ==> (a (b|c)|d)
-		 */
-		if ((a->type != CLI_TYPE_ALTERNATE) &&
-		    (b->type == CLI_TYPE_ALTERNATE) &&
-		    ((lcp = syntax_lcp(a, b->first)) > 0)) {
-			cli_syntax_t *c = next;
-
-			a = c->first;
-			a->refcount++;
-
-			b = syntax_new(CLI_TYPE_ALTERNATE, first, a);
-			if (!b) {
-				syntax_free(next);
-				return NULL;
-			}
-
-			a = c->next;
-			a->refcount++;
-			syntax_free(c);
-			return syntax_new(CLI_TYPE_ALTERNATE, b, a);
-		}
-
-		/*
-		 *	b|a ==> a|b
-		 */
-		if (syntax_order(a, b) > 0) {
-			assert(first == a);
-			first = next;
-			next = a;
-			a = first;
-			b = next;
-		}
 		break;
 
 	case CLI_TYPE_CONCAT:
@@ -913,7 +996,7 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
 
 			b = a->next;
 			b->refcount++;
-			c = syntax_new(CLI_TYPE_CONCAT, b, next);
+			c = syntax_alloc(CLI_TYPE_CONCAT, b, next);
 			if (!c) {
 				syntax_free(first);
 				return NULL;
@@ -1026,27 +1109,27 @@ static cli_syntax_t *syntax_new(cli_type_t type, void *first, void *next)
  *	Internal "print syntax to string"
  */
 static size_t syntax_sprintf(char *buffer, size_t len,
-			     const cli_syntax_t *this, cli_type_t parent)
+			     const cli_syntax_t *in, cli_type_t parent)
 {
 	size_t outlen, offset;
 	cli_syntax_t *a;
 
-	switch (this->type) {
+	switch (in->type) {
 	case CLI_TYPE_EXACT:
 	case CLI_TYPE_VARARGS:
-		outlen = snprintf(buffer, len, "%s", (char *) this->first);
+		outlen = snprintf(buffer, len, "%s", (char *) in->first);
 		break;
 
 	case CLI_TYPE_MACRO:
-		outlen = snprintf(buffer, len, "%s=", (char *) this->first);
+		outlen = snprintf(buffer, len, "%s=", (char *) in->first);
 		buffer += outlen;
 		len -= outlen;
-		outlen += syntax_sprintf(buffer, len, this->next,
+		outlen += syntax_sprintf(buffer, len, in->next,
 					 CLI_TYPE_MACRO);
 		break;
 
 	case CLI_TYPE_CONCAT:
-		outlen = syntax_sprintf(buffer, len, this->first,
+		outlen = syntax_sprintf(buffer, len, in->first,
 					CLI_TYPE_CONCAT);
 		buffer += outlen;
 		len -= outlen;
@@ -1056,7 +1139,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		len--;
 		outlen++;
 
-		outlen += syntax_sprintf(buffer, len, this->next,
+		outlen += syntax_sprintf(buffer, len, in->next,
 					 CLI_TYPE_CONCAT);
 		break;
 
@@ -1064,7 +1147,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		buffer[0] = '[';
 		buffer++;
 		len--;
-		outlen = syntax_sprintf(buffer, len, this->first,
+		outlen = syntax_sprintf(buffer, len, in->first,
 					CLI_TYPE_OPTIONAL);
 		buffer += outlen;
 		len -= outlen;
@@ -1077,7 +1160,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		buffer[0] = '{';
 		buffer++;
 		len--;
-		outlen = syntax_sprintf(buffer, len, this->first,
+		outlen = syntax_sprintf(buffer, len, in->first,
 					CLI_TYPE_KEY);
 		buffer += outlen;
 		len -= outlen;
@@ -1087,7 +1170,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		break;
 
 	case CLI_TYPE_PLUS:
-		a = this->first;
+		a = in->first;
 		offset = 0;
 		if (a->type == CLI_TYPE_CONCAT) {
 			buffer[0] = '(';
@@ -1097,7 +1180,7 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		} else {
 			a = NULL;
 		}
-		outlen = syntax_sprintf(buffer, len, this->first,
+		outlen = syntax_sprintf(buffer, len, in->first,
 					CLI_TYPE_PLUS);
 		buffer += outlen;
 		len -= outlen;
@@ -1123,14 +1206,14 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 			outlen++;
 		}
 		outlen += syntax_sprintf(buffer + outlen, len,
-					 this->first, CLI_TYPE_ALTERNATE);
+					 in->first, CLI_TYPE_ALTERNATE);
 		buffer[outlen] = '|';
 		len--;
 		outlen++;
 
-		outlen += syntax_sprintf(buffer + outlen, len, this->next,
+		outlen += syntax_sprintf(buffer + outlen, len, in->next,
 					 CLI_TYPE_ALTERNATE);
-		if (((cli_syntax_t *)this->next)->type != CLI_TYPE_ALTERNATE) {
+		if (((cli_syntax_t *)in->next)->type != CLI_TYPE_ALTERNATE) {
 			buffer[outlen] = ')';
 			buffer[outlen + 1] = '\0';
 			outlen++;
@@ -1150,13 +1233,13 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 /*
  *	Print syntax to STDOUT
  */
-void syntax_printf(const cli_syntax_t *this)
+void syntax_printf(const cli_syntax_t *a)
 {
-	if (!this) return;
+	if (!a) return;
 
 	char buffer[8192];
 
-	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
+	syntax_sprintf(buffer, sizeof(buffer), a, CLI_TYPE_EXACT);
 	recli_fprintf(recli_stdout, "%s", buffer);
 }
 
@@ -1164,21 +1247,21 @@ void syntax_printf(const cli_syntax_t *this)
 /*
  *	Print syntax, one alternation on each line.
  */
-void syntax_print_lines(const cli_syntax_t *this)
+void syntax_print_lines(const cli_syntax_t *in)
 {
 	char buffer[1024];
 
-	if (!this) return;
+	if (!in) return;
 
-	while (this->type == CLI_TYPE_ALTERNATE) {
-		assert(((cli_syntax_t *)this->first)->type != this->type);
+	while (in->type == CLI_TYPE_ALTERNATE) {
+		assert(((cli_syntax_t *)in->first)->type != in->type);
 		syntax_sprintf(buffer, sizeof(buffer),
-				      this->first, CLI_TYPE_EXACT);
+				      in->first, CLI_TYPE_EXACT);
 		recli_fprintf(recli_stdout, "%s\r\n", buffer);
-		this = this->next;
+		in = in->next;
 	}
 
-	syntax_sprintf(buffer, sizeof(buffer), this, CLI_TYPE_EXACT);
+	syntax_sprintf(buffer, sizeof(buffer), in, CLI_TYPE_EXACT);
 	recli_fprintf(recli_stdout, "%s\r\n", buffer);
 }
 
@@ -1257,7 +1340,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			}
 
 			p++;
-			this = syntax_new(CLI_TYPE_OPTIONAL, a, NULL);
+			this = syntax_alloc(CLI_TYPE_OPTIONAL, a, NULL);
 			if (!this) {
 				syntax_error(start, "Failed creating [...]");
 				syntax_free(first);
@@ -1291,7 +1374,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			}
 
 			p++;
-			this = syntax_new(CLI_TYPE_KEY, a, NULL);
+			this = syntax_alloc(CLI_TYPE_KEY, a, NULL);
 			if (!this) {
 				syntax_error(start, "Failed creating {...}");
 				syntax_free(first);
@@ -1341,8 +1424,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 					return 0;
 				}
 
-				this = syntax_new(CLI_TYPE_ALTERNATE,
-						  a, b);
+				this = syntax_alternate(a, b);
 				if (!this) {
 					syntax_error(q, "Failed createing (|...)");
 					syntax_free(first);
@@ -1373,7 +1455,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 				return 0;
 			}
 
-			this = syntax_new(CLI_TYPE_VARARGS, "...", NULL);
+			this = syntax_alloc(CLI_TYPE_VARARGS, "...", NULL);
 			if (!this) {
 				syntax_error(start, "Failed creating ...");
 				syntax_free(first);
@@ -1416,7 +1498,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 				return 0;
 			}
 
-			this = syntax_new(CLI_TYPE_MACRO, tmp, next);
+			this = syntax_alloc(CLI_TYPE_MACRO, tmp, next);
 			if (!this) {
 				syntax_error(start, "Failed creating macro");
 				syntax_free(first);
@@ -1453,7 +1535,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 
 		assert(*tmp != '\0');
 
-		this = syntax_new(CLI_TYPE_EXACT, tmp, NULL);
+		this = syntax_alloc(CLI_TYPE_EXACT, tmp, NULL);
 		if (!this) {
 			syntax_error(start, "Failed creating word");
 			syntax_free(first);
@@ -1475,7 +1557,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 
 
 			assert(this->type != CLI_TYPE_MACRO);
-			a = syntax_new(CLI_TYPE_PLUS, this, NULL);
+			a = syntax_alloc(CLI_TYPE_PLUS, this, NULL);
 			if (!a) {
 				syntax_error(start, "Failed creating +");
 				syntax_free(first);
@@ -1491,7 +1573,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			cli_syntax_t *a;
 
 			assert(this != NULL);
-			a = syntax_new(CLI_TYPE_CONCAT, first, this);
+			a = syntax_alloc(CLI_TYPE_CONCAT, first, this);
 			if (!a) {
 				syntax_error(start, "Failed appending word");
 				syntax_free(first);
@@ -1606,7 +1688,7 @@ static int syntax_prefix_words(int argc, char *argv[],
 		if (next) {
 			a->refcount++;
 			next->refcount++;
-			a = syntax_new(CLI_TYPE_CONCAT, this->next, next);
+			a = syntax_alloc(CLI_TYPE_CONCAT, this->next, next);
 			assert(a != this);
 		}
 		matches = syntax_prefix_words(argc, argv, this->first, a);
@@ -1659,7 +1741,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 
 	if (preorder) {
 		rcode = preorder(ctx, this);
-		if (!rcode) return 0;
+		if (!rcode) {
+			return 0;
+		}
 	}
 
 #undef WALK
@@ -1668,7 +1752,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
 	case CLI_TYPE_VARARGS:
-		if (inorder && !inorder(ctx, this)) return 0;
+		if (inorder && !inorder(ctx, this)) {
+			return 0;
+		}
 		break;
 
 	case CLI_TYPE_PLUS:
@@ -1679,7 +1765,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 
 		if (inorder) {
 			rcode = inorder(ctx, this);
-			if (!rcode) return 0;
+			if (!rcode) {
+				return 0;
+			}
 			if (rcode == CLI_WALK_REPEAT) goto repeat;
 		}
 		break;
@@ -1690,7 +1778,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	case CLI_TYPE_KEY:
 		WALK(this->first);
 
-		if (inorder && !inorder(ctx, this)) return 0;
+		if (inorder && !inorder(ctx, this)) {
+			return 0;
+		}
 		break;
 
 	case CLI_TYPE_CONCAT:
@@ -1701,7 +1791,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 			int rcode;
 
 			rcode = inorder(ctx, this);
-			if (!rcode) return 0;
+			if (!rcode) {
+				return 0;
+			}
 			if (rcode == CLI_WALK_SKIP) break;
 		}
 
@@ -1714,7 +1806,9 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	}
 #undef WALK
 
-	if (postorder && !postorder(ctx, this)) return 0;
+	if (postorder && !postorder(ctx, this)) {
+		return 0;
+	}
 
 	return 1;
 }
@@ -1907,7 +2001,7 @@ static int syntax_match_pre(void *ctx, cli_syntax_t *this)
 	case CLI_TYPE_CONCAT:
 	case CLI_TYPE_KEY:
 		m->stack[m->ptr + 1] = m->stack[m->ptr];
-		assert( m->stack[m->ptr].argc >= 0);
+		assert(m->stack[m->ptr].argc >= 0);
 	fix:
 		m->ptr++;
 		m->word = m->stack + m->ptr;
@@ -2122,14 +2216,14 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 	case CLI_TYPE_EXACT:
 		if (this->next) { /* call syntax checker */
 			if (!((cli_syntax_parse_t)this->next)(word)) {
-				return NULL;
+				return NULL; /* failed to match */
 			}
 		} else
 
 		if (strcmp((char *)this->first, word) != 0) {
-			if (sense == CLI_MATCH_EXACT) return NULL;
+			if (sense == CLI_MATCH_EXACT) return NULL; /* failed to match */
 			if (strncmp((char *)this->first,
-				    word, strlen(word)) != 0) return NULL;
+				    word, strlen(word)) != 0) return NULL; /* failed to match */
 		}
 
 		this->refcount++;
@@ -2140,18 +2234,18 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 		assert(next->refcount > 0);
 
 		next->refcount++;
-		return syntax_new(CLI_TYPE_CONCAT, this, next);
+		return syntax_alloc(CLI_TYPE_CONCAT, this, next);
 
 	case CLI_TYPE_KEY:
 		this = syntax_match_word(word, sense, this->first, NULL);
-		if (!this) return NULL;
+		if (!this) return NULL; /* failed to match */
 		goto do_concat;
 
 	case CLI_TYPE_OPTIONAL:
 		found = syntax_match_word(word, sense, this->first, next);
 		if (found) return found;
 
-		if (!next) return NULL;
+		if (!next) return NULL; /* matched, but nothing more to match */
 
 		return syntax_match_word(word, sense, next, NULL);
 
@@ -2160,7 +2254,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 		if (next) {
 			a->refcount++;
 			next->refcount++;
-			a = syntax_new(CLI_TYPE_CONCAT, this->next, next);
+			a = syntax_alloc(CLI_TYPE_CONCAT, this->next, next);
 			assert(a != this);
 		}
 		found = syntax_match_word(word, sense, this->first, a);
@@ -2179,12 +2273,14 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 		return syntax_match_word(word, sense, this, next);
 
 	default:
+		assert(0 == 1);
 		break;
 	}
 
-	return NULL;
+	return NULL;		/* internal error */
 }
-				 
+
+
 /*
  *	Check argv against a syntax.
  */
@@ -2210,7 +2306,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 	rcode = syntax_walk_all(head, &match, syntax_match_pre,
 				syntax_match_in, syntax_match_post);
 			     
-	if (!rcode) return -1;	/* failure walking the tree */
+//	if (!rcode) return -1;	/* failure walking the tree */
 
 	if (match.stack[0].want_more) return 0;  /* matched some, not all */
 
@@ -2263,10 +2359,10 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 
 	next = this;
 	for (i = match - 1; i >= 0; i--) {
-		a = syntax_new(CLI_TYPE_EXACT, argv[i], NULL);
+		a = syntax_alloc(CLI_TYPE_EXACT, argv[i], NULL);
 		assert(a != NULL);
 
-		this = syntax_new(CLI_TYPE_CONCAT, a, next);
+		this = syntax_alloc(CLI_TYPE_CONCAT, a, next);
 		assert(this != NULL);
 		next = this;
 	}
@@ -2438,7 +2534,7 @@ int syntax_merge(cli_syntax_t **phead, char *str)
 	printf(" }\n");
 #endif
 
-	a = syntax_new(CLI_TYPE_ALTERNATE, *phead, this);
+	a = syntax_alternate(*phead, this);
 	if (!a) {
 		if (!syntax_error_string) {
 			syntax_error(str, "Syntax is incompatible with previous commands");
@@ -2514,11 +2610,11 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 {
 	cli_syntax_t *this;
 
-	this = syntax_new(CLI_TYPE_EXACT, (void *) help, NULL);
+	this = syntax_alloc(CLI_TYPE_EXACT, (void *) help, NULL);
 	assert(this != NULL);
 	this->length = flag; /* internal flag... */
 
-	this = syntax_new(CLI_TYPE_CONCAT, last, this);
+	this = syntax_alloc(CLI_TYPE_CONCAT, last, this);
 	assert(this != NULL);
 	
 	if (!*phead) {
@@ -2526,7 +2622,7 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 	} else {
 		cli_syntax_t *a;
 		
-		a = syntax_new(CLI_TYPE_ALTERNATE, *phead, this);
+		a = syntax_alternate(*phead, this);
 		assert(a != NULL);
 		
 		*phead = a;
@@ -2813,7 +2909,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	rcode = syntax_walk_all(head, &match, syntax_match_pre,
 				syntax_match_in, syntax_match_post);
 			     
-	if (!rcode) return -1;
+//	if (!rcode) return -1;
 
 	if (match.stack[0].argc != 0) return -1;
 
