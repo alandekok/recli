@@ -554,6 +554,8 @@ int main(int argc, char **argv)
 				recli_exec(buffer, my_argc, my_argv,
 					   config.envp);
 				recli_load_syntax(&config);
+				fflush(stdout);
+				fflush(stderr);
 			}
 		}
 	next_line:
