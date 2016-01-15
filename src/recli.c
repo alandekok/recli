@@ -272,6 +272,8 @@ int main(int argc, char **argv)
 {
 	int c, rcode, my_argc;
 	const char *prompt = config.prompt;
+	char *prompt_full = "";
+	char *prompt_ctx = "";
 	char const *progname;
 	int quit = 0;
 	int context = 1;
@@ -353,13 +355,19 @@ int main(int argc, char **argv)
 		tty = 0;
 	}
 
-	/*
-	 *	The default prompt is the program name.
-	 */
-	if (!config.prompt) {
-		line = malloc(256);
-		snprintf(line, 256, "%s> ", progname);
-		config.prompt = prompt = line;
+	if (tty) {
+		/*
+		 *	The default prompt is the program name.
+		 */
+		if (!config.prompt) config.prompt = progname;
+
+		prompt_full = malloc(256);
+		snprintf(prompt_full, 256, "%s> ", config.prompt);
+
+		prompt_ctx = malloc(256);
+		snprintf(prompt_ctx, 256, "%s ...> ", config.prompt);
+
+		prompt = prompt_full;
 	}
 
 	/*
@@ -406,7 +414,7 @@ int main(int argc, char **argv)
 
 					ctx_stack_ptr--;
 					if (ctx_stack_ptr == 0) {
-						prompt = config.prompt;
+						prompt = prompt_full;
 						ctx_line_end = ctx_line_full;
 					} else {
 						int i;
@@ -425,7 +433,7 @@ int main(int argc, char **argv)
 				if (strcmp(line, "end") == 0) {
 					ctx_stack_ptr = 0;
 					ctx_line_end = ctx_line_full;
-					prompt = config.prompt;
+					prompt = prompt_full;
 					goto next_line;
 				}
 
@@ -519,7 +527,8 @@ int main(int argc, char **argv)
 				ctx_line_end += ctx_stack[ctx_stack_ptr].len;
 
 				ctx_stack_ptr++;
-				prompt = "recli ...> ";
+
+				prompt = prompt_ctx;
 				goto next_line;
 			}
 			
