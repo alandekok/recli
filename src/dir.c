@@ -45,6 +45,11 @@
 
 #include "recli.h"
 
+/*
+ *	For recli.c
+ */
+pid_t child_pid = -1;
+
 static int load_envp(const char *dir, recli_config_t *config)
 {
 	int argc;
@@ -399,8 +404,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 	int status;
 	size_t out;
 	int pd[2], epd[2];
-	char *p, *q, buffer[8192];
-	pid_t pid;
+	char *p, *q, buffer[8192];	
 	struct stat sbuf;
 	char *my_argv[256];
 
@@ -460,8 +464,8 @@ run:
 		return -1;
 	}
 
-	pid = fork();
-	if (pid == 0) {		/* child */
+	child_pid = fork();
+	if (child_pid == 0) {		/* child */
 		int devnull;
 
 		devnull = open("/dev/null", O_RDWR);
@@ -507,7 +511,7 @@ run:
 	close(pd[1]);
 	close(epd[1]);
 
-	if (pid < 0) {
+	if (child_pid < 0) {
 		assert(pd[0] >= 0);
 		assert(epd[0] >= 0);
 		close(pd[0]);
@@ -582,7 +586,8 @@ run:
 		}
 	}
 
-	waitpid(pid, &status, 0);
+	waitpid(child_pid, &status, 0);
+	child_pid = -1;
 
 	index = -1;
 	if (WEXITSTATUS(status) == 0) {

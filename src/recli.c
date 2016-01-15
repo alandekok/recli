@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include "recli.h"
 
 static int in_string = 0;
@@ -63,6 +64,30 @@ static int ctx2argv(char *buf, size_t len, int max_argc, char *argv[])
 	return str2argv(ctx_mybuf, p - ctx_mybuf, max_argc, argv);
 }
 
+extern pid_t child_pid;
+
+static void catch_sigquit(int sig)
+{
+	if (child_pid > 1) {
+		kill(child_pid, sig);
+	}
+
+	/*
+	 *	Else ignore it.
+	 */
+}
+
+static int set_signal(int sig, sig_t func)
+{
+	struct sigaction act;
+
+	memset(&act, 0, sizeof(act));
+	act.sa_flags = 0;
+	sigemptyset(&act.sa_mask);
+	act.sa_handler = func;
+
+	return sigaction(sig, &act, NULL);
+}
 
 #ifndef NO_COMPLETION
 void completion(const char *buf, linenoiseCompletions *lc)
@@ -358,6 +383,13 @@ int main(int argc, char **argv)
 	}
 
 	if (quit) goto done;
+
+#ifdef SIGPIPE
+	signal(SIGPIPE, SIG_IGN);
+#endif
+
+	set_signal(SIGINT, catch_sigquit);
+	set_signal(SIGQUIT, catch_sigquit);
 
 	while((line = linenoise(prompt)) != NULL) {
 		int runit = 1;
