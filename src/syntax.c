@@ -444,7 +444,7 @@ static int syntax_insert(cli_syntax_t *this)
 	}
 
 	if (this->type == CLI_TYPE_ALTERNATE) {
-		assert(syntax_order(this->first, this->next) <= 0);
+//		assert(syntax_order(this->first, this->next) <= 0);
 	}
 #endif
 
@@ -608,14 +608,48 @@ static int syntax_alternate_length(cli_syntax_t *a)
 static void syntax_alternate_split(cli_syntax_t **out, cli_syntax_t *a)
 {
 	while (a->type == CLI_TYPE_ALTERNATE) {
-		*out = a->first;
+		cli_syntax_t *b = a->first;
+
+		assert(b != NULL);
+		assert(b->type != CLI_TYPE_ALTERNATE);
+		*out = syntax_ref(b);
 		out++;
 		a = a->next;
 	}
 
-	*out = a;
+	*out = syntax_ref(a);
 }
 
+
+static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b);
+
+static cli_syntax_t *syntax_split_prefix(cli_syntax_t *a, cli_syntax_t *b, int lcp)
+{
+	cli_syntax_t *c, *d, *e, *f;
+
+	d = syntax_skip_prefix(a, lcp);
+	e = syntax_skip_prefix(b, lcp);
+
+	if (!d) {
+		f = syntax_alloc(CLI_TYPE_OPTIONAL, e, NULL);
+		assert(f != NULL);
+
+	} else if (!e) {
+		f = syntax_alloc(CLI_TYPE_OPTIONAL, d, NULL);
+		assert(f != NULL);
+
+	} else {
+		f = syntax_alternate(d, e);
+		assert(f != NULL);
+	}
+
+	c = syntax_concat_prefix(a, lcp, f);
+	assert(c != NULL);
+
+	syntax_free(a);
+	syntax_free(b);
+	return c;
+}
 
 /*
  *	FIXME: if the first node is exact or concat with exact, then
@@ -665,7 +699,9 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 			a = b;
 			b = c;
 		}
-		return syntax_alloc(CLI_TYPE_ALTERNATE, a, b);
+
+		c  = syntax_alloc(CLI_TYPE_ALTERNATE, a, b);
+		return c;				
 	}
 
 	/*
@@ -673,29 +709,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 	 */
 	lcp = syntax_lcp(a, b);
 	if (lcp > 0) {
-		cli_syntax_t *d, *e, *f;
-
-		d = syntax_skip_prefix(a, lcp);
-		e = syntax_skip_prefix(b, lcp);
-
-		if (!d) {
-			f = syntax_alloc(CLI_TYPE_OPTIONAL, e, NULL);
-			assert(f != NULL);
-
-		} else if (!e) {
-			f = syntax_alloc(CLI_TYPE_OPTIONAL, d, NULL);
-			assert(f != NULL);
-
-		} else {
-			f = syntax_alternate(d, e);
-			assert(f != NULL);
-		}
-
-		c = syntax_concat_prefix(a, lcp, f);
-		assert(c != NULL);
-
-		syntax_free(a);
-		syntax_free(b);
+		c = syntax_split_prefix(a, b, lcp);
 		return c;
 	}
 
@@ -749,7 +763,8 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		syntax_free(a);
 		syntax_free(b);
 
-		return syntax_alloc(CLI_TYPE_CONCAT, f, c);
+		d = syntax_alloc(CLI_TYPE_CONCAT, f, c);
+		return d;
 	}
 
 	/*
@@ -760,63 +775,14 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		goto create;
 	}
 
-	if ((a->type == CLI_TYPE_ALTERNATE) &&
-	    (b->type != CLI_TYPE_ALTERNATE)) {
-		c = a;
-		a = b;
-		b = c;
-	}
-
 	/*
-	 *	a | (b|c) gets checked recursively.
-	 *
-	 *	We assume that (b|c) is in normal form.
-	 */
-	if ((a->type != CLI_TYPE_ALTERNATE) &&
-	    (b->type == CLI_TYPE_ALTERNATE)) {
-		cli_syntax_t *d;
-
-		/*
-		 *	Enforce order on the lists.
-		 */
-		if (syntax_order(a, b->first) > 0) {
-			c = syntax_alternate(syntax_ref(b->next), a);
-			d = syntax_alloc(CLI_TYPE_ALTERNATE, syntax_ref(b->first), c);
-			syntax_free(b);
-			return d;
-		}
-
-		/*
-		 *	a | (b | c) ==> (a | b) | c
-		 *
-		 *	But only if (a|b) has a common suffix / prefix.
-		 */
-		c = syntax_alternate(syntax_ref(a), syntax_ref(b->first));
-		if (c->type != CLI_TYPE_ALTERNATE) {
-			d = syntax_alloc(CLI_TYPE_ALTERNATE, c, syntax_ref(b->next));
-			syntax_free(a);
-			syntax_free(b);
-			return d;
-		}
-		syntax_free(c);
-
-		/*
-		 *	a | (b | c) ==> a | (b | c)
-		 *
-		 *	When  a < b and lcs(a,b) == 0, and lcp(a, b) == 0
-		 */
-		return syntax_alloc(CLI_TYPE_ALTERNATE, a, b);
-	}
-
-	/*
-	 *	Both nodes are alternation.  Break them apart, sort
-	 *	them, and put them back together.
+	 *	One or both nodes are alternation.  Break them apart,
+	 *	sort them, and put them back together.
 	 */
 	total_a = syntax_alternate_length(a);
-	assert(total_a > 1);
+	assert(total_a >= 1);
 	total_b = syntax_alternate_length(b);
-	assert(total_b > 1);
-
+	assert(total_b >= 1);
 
 	total = total_a + total_b;
 	nodes = calloc(total * sizeof(nodes[0]), 1);
@@ -837,6 +803,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 			if (!nodes[j]) continue;
 
 			if (nodes[i] == nodes[j]) {
+				syntax_free(nodes[j]);
 				nodes[j] = NULL;
 				continue;
 			}
@@ -850,22 +817,44 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		}
 	}
 
-	c = NULL;
+	/*
+	 *	Enforce LCP on nodes, via an O(N^2) algorithm.
+	 *
+	 *	FIXME: add LCS, too?  Which we care about less, to be honest.
+	 */
+	for (i = 0; i < (total - 1); i++) {
+		if (!nodes[i]) continue;
+
+		for (j = i + 1; j < total; j++) {
+			int lcp;
+
+			if (!nodes[j]) continue;
+
+			lcp = syntax_lcp(nodes[i], nodes[j]);
+			if (!lcp) continue;
+
+			c = syntax_split_prefix(nodes[i], nodes[j], lcp);
+
+			nodes[j] = NULL;
+			nodes[i] = c;
+		}
+	}
 
 	/*
-	 *	Concatenate all of them from the back up.
+	 *	Alternate all of them from the back up.
 	 */
+	c = NULL;
 	for (i = total - 1; i >= 0; i--) {
 		cli_syntax_t *d;
 
 		if (!nodes[i]) continue;
 
 		if (!c) {
-			c = syntax_ref(nodes[i]);
+			c = nodes[i];
 			continue;
 		}
 
-		d = syntax_alloc(CLI_TYPE_ALTERNATE, syntax_ref(nodes[i]), c);
+		d = syntax_alloc(CLI_TYPE_ALTERNATE, nodes[i], c);
 		assert(d != NULL);
 
 		c = d;
@@ -873,6 +862,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 
 	syntax_free(a);
 	syntax_free(b);
+	free(nodes);
 
 	return c;
 }

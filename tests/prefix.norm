@@ -1,1 +1,1 @@
-(foo bar|foo baz|hello (a|b|there (me|you)))
+(foo (bar|baz)|hello (a|b|there (me|you)))
