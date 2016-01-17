@@ -632,19 +632,23 @@ static cli_syntax_t *syntax_split_prefix(cli_syntax_t *a, cli_syntax_t *b, int l
 
 	if (!d) {
 		f = syntax_alloc(CLI_TYPE_OPTIONAL, e, NULL);
-		assert(f != NULL);
+		if (!f) {
+		error:
+			syntax_free(a);
+			syntax_free(b);
+			return NULL;
+		}
 
 	} else if (!e) {
 		f = syntax_alloc(CLI_TYPE_OPTIONAL, d, NULL);
-		assert(f != NULL);
+		if (!f) goto error;
 
 	} else {
 		f = syntax_alternate(d, e);
-		assert(f != NULL);
+		if (!f) goto error;
 	}
 
 	c = syntax_concat_prefix(a, lcp, f);
-	assert(c != NULL);
 
 	syntax_free(a);
 	syntax_free(b);
@@ -725,7 +729,13 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 			lcp = syntax_prefix_length(a, c);
 			assert(lcp > 0);
 			d = syntax_concat_prefix(a, lcp, NULL);
-			assert(d != NULL);
+			if (!d) {
+			error:
+				syntax_free(a);
+				syntax_free(b);
+				syntax_free(c);
+				return NULL;
+			}
 		} else {
 			/*
 			 *	a | b a = [b] a
@@ -737,7 +747,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 			lcp = syntax_prefix_length(b, c);
 			assert(lcp > 0);
 			e = syntax_concat_prefix(b, lcp, NULL);
-			assert(e != NULL);
+			if (!e) goto error;
 		} else {
 			assert(d != NULL);
 
@@ -757,8 +767,9 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 
 		} else {
 			f = syntax_alternate(d, e);
-			assert(f != NULL);
 		}
+
+		if (!f) goto error;
 
 		syntax_free(a);
 		syntax_free(b);
@@ -834,6 +845,17 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 			if (!lcp) continue;
 
 			c = syntax_split_prefix(nodes[i], nodes[j], lcp);
+			if (!c) {
+				int k;
+
+				nodes[i] = nodes[j] = NULL;
+
+				for (k = 0; k < total; k++) {
+					if (nodes[k]) syntax_free(nodes[k]);
+				}
+				free(nodes);
+				return NULL;
+			}
 
 			nodes[j] = NULL;
 			nodes[i] = c;
@@ -855,7 +877,17 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		}
 
 		d = syntax_alloc(CLI_TYPE_ALTERNATE, nodes[i], c);
-		assert(d != NULL);
+		if (!d) {
+			int k;
+
+			nodes[i] = NULL;
+
+			for (k = 0; k < total; k++) {
+				if (nodes[k]) syntax_free(nodes[k]);
+			}
+			free(nodes);
+			return NULL;
+		}
 
 		c = d;
 	}
@@ -1062,7 +1094,9 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 	}
 
 	/*
-	 * [[a]] = [a]
+	 *	[[a]] = [a]
+	 *
+	 *	It should probably be an error.
 	 */
 	if (type == CLI_TYPE_OPTIONAL) {
 		a = first;
