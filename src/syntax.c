@@ -3021,8 +3021,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 /*
  *	Show help for a given argv[]
  */
-const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[],
-			     int flag)
+const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
 {
 	int rcode;
 	const char *help = NULL;
@@ -3070,7 +3069,7 @@ show_help:
 	while (this->type == CLI_TYPE_ALTERNATE) {
 		cli_syntax_t *first = tail->first;
 		if ((first->type == CLI_TYPE_EXACT) &&
-		    (first->length == flag)) {
+		    (first->length == 1)) { /* long help */
 			this = first;
 			break;
 		}
@@ -3079,7 +3078,7 @@ show_help:
 	}
 
 	if ((this->type == CLI_TYPE_EXACT) &&
-	    (this->length == flag)) {
+	    (this->length == 1)) {
 		help = this->first;
 	}
 

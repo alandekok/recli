@@ -38,7 +38,7 @@ extern void syntax_print_lines(const cli_syntax_t *this);
 extern int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 			       int max_tabs, char *tabs[]);
 extern int syntax_parse_help(const char *filename, cli_syntax_t **phead);
-extern const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[], int flag);
+extern const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[]);
 extern cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp);
 

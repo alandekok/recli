@@ -253,7 +253,7 @@ static int do_help(char *buffer, size_t len)
 		if (my_argc < 0) return -1;
 				
 		help = syntax_show_help(config.help,
-					my_argc, my_argv, 1);
+					my_argc, my_argv);
 		if (!help) {
 			printf("\r\n");
 		} else {
