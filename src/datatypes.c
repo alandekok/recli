@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include "recli.h"
 
 static int parse_boolean(const char *buffer)
@@ -19,10 +20,13 @@ static int parse_boolean(const char *buffer)
 
 static int parse_integer(const char *buffer)
 {
-	int part;
+	long part;
 	char *end;
 	
 	part = strtol(buffer, &end, 10);
+
+	if ((part == LONG_MIN) || (part == LONG_MAX)) return 0;
+
 	if (*end) return 0;
 
 	return 1;
