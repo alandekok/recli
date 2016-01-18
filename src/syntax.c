@@ -3126,7 +3126,7 @@ redo:
 
 int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 {
-	int i, rcode;
+	int i;
 	size_t len;
 	cli_syntax_t *this, *tail;
 	cli_match_t match;
@@ -3149,7 +3149,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	match.word->argv = argv;
 	match.word->match = 0;
 
-	rcode = syntax_walk_all(head, &match, syntax_match_pre,
+	syntax_walk_all(head, &match, syntax_match_pre,
 				syntax_match_in, syntax_match_post);
 			     
 //	if (!rcode) return -1;
