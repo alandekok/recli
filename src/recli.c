@@ -245,6 +245,7 @@ static int do_help(char *buffer, size_t len)
 	    (strncmp(buffer, "help ", 5) == 0)) {
 		const char *help = NULL;
 		char const *fail = NULL;
+		cli_syntax_t *match;
 
 		my_argc = ctx2argv(buffer + 4, len - 4, 128, my_argv);
 		if (my_argc < 0) return -1;
@@ -257,6 +258,15 @@ static int do_help(char *buffer, size_t len)
 				fprintf(stderr, "Invalid input '%s'\n", fail);
 			}
 			return 1;
+		}
+
+		/*
+		 *	Print short help text first
+		 */
+		match = syntax_match_max(config.syntax, my_argc, my_argv);
+		if (match) {
+			syntax_free(match);
+			syntax_print_context_help(config.help, my_argc, my_argv);
 		}
 
 		help = syntax_show_help(config.help,
