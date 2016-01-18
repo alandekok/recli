@@ -481,6 +481,7 @@ retry:
 static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next);
 
 
+#ifdef WITH_LCS
 /*
  *	Length of "a" which is a prefix of "b"
  */
@@ -558,6 +559,7 @@ redo:
 	assert(b->type != CLI_TYPE_CONCAT);
 	goto redo;
 }
+#endif				/* WITH_LCS */
 
 
 static cli_syntax_t *syntax_one_prefix(cli_syntax_t *a, cli_syntax_t *b)
@@ -924,6 +926,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		return c;
 	}
 
+#ifdef WITH_LCS
 	/*
 	 *	(a foo|b foo) ==> (a|b) foo
 	 */
@@ -984,6 +987,7 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 		d = syntax_alloc(CLI_TYPE_CONCAT, f, c);
 		return d;
 	}
+#endif	/* WITH_LCS */
 
 	/*
 	 *	Anything else, just create the node.
