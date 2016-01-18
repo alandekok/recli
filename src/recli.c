@@ -187,7 +187,6 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 		memcpy(mybuf, buf, len + 1);
 		argc = ctx2argv(mybuf, len, 256, argv);
 
-
 		match = syntax_match_max(config.syntax, argc, argv);
 		if (!match) return 1;
 
@@ -213,10 +212,7 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 	} else {
 
 		match = syntax_match_max(config.syntax, argc, argv);
-		if (!match) {
-			printf("NO MATCH\t\n");
-			
-		} else {
+		if (match) {
 			syntax_free(match);
 			syntax_print_context_help(config.help, argc, argv);
 		}
