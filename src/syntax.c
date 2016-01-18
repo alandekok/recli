@@ -599,6 +599,10 @@ static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
 
 	if (!syntax_one_prefix(a, b)) return 0;
 
+	if ((a->type != CLI_TYPE_CONCAT) || (b->type != CLI_TYPE_CONCAT)) {
+		return 1;
+	}
+
 	return 1 + syntax_lcp(a->next, b->next);
 }
 
