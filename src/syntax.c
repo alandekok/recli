@@ -3126,7 +3126,7 @@ redo:
 
 int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 {
-	int rcode;
+	int i, rcode;
 	size_t len;
 	cli_syntax_t *this, *tail;
 	cli_match_t match;
@@ -3170,7 +3170,12 @@ show_help:
 		len = syntax_sprintf_word(buffer, sizeof(buffer),
 					  this->first);
 
-		if (len != 0) recli_fprintf(recli_stdout, "\t%s", buffer);
+		if (len != 0) {
+			for (i = 0; i < argc; i++) {
+				recli_fprintf(recli_stdout, "%s ", argv[i]);
+			}
+			recli_fprintf(recli_stdout, " - %s", buffer);
+		}
 
 		this = this->next;
 	}
@@ -3180,7 +3185,12 @@ show_help:
 	syntax_free(tail);
 	len = syntax_sprintf_word(buffer, sizeof(buffer), this);
 	if (len == 0) return 0;
-	
-	recli_fprintf(recli_stdout, "\t%s", buffer);
+
+	for (i = 0; i < argc; i++) {
+		recli_fprintf(recli_stdout, "%s ", argv[i]);
+
+	}	
+
+	recli_fprintf(recli_stdout, " - %s", buffer);
 	return 1;
 }
