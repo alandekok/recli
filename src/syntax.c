@@ -560,6 +560,32 @@ redo:
 }
 
 
+static cli_syntax_t *syntax_one_prefix(cli_syntax_t *a, cli_syntax_t *b)
+{
+	assert(a != b);
+
+	if ((a->type != CLI_TYPE_CONCAT) &&
+	    (b->type != CLI_TYPE_CONCAT)) {
+		return NULL;
+	}
+
+	if ((a->type == CLI_TYPE_CONCAT) &&
+	    (b->type != CLI_TYPE_CONCAT)) {
+		if (a->first == b) return a->first;
+		return NULL;
+	}
+
+	if ((a->type != CLI_TYPE_CONCAT) &&
+	    (b->type == CLI_TYPE_CONCAT)) {
+		if (b->first == a) return b->first;
+		return 0;
+	}
+
+	if (a->first != b->first) return NULL;
+
+	return a->first;
+}
+
 /*
  *	Longest common prefix of two lists.
  */
@@ -571,24 +597,7 @@ static int syntax_lcp(cli_syntax_t *a, cli_syntax_t *b)
 		return a->length;
 	}
 
-	if ((a->type != CLI_TYPE_CONCAT) &&
-	    (b->type != CLI_TYPE_CONCAT)) {
-		return 0;
-	}
-
-	if ((a->type == CLI_TYPE_CONCAT) &&
-	    (b->type != CLI_TYPE_CONCAT)) {
-		if (a->first == b) return 1;
-		return 0;
-	}
-
-	if ((a->type != CLI_TYPE_CONCAT) &&
-	    (b->type == CLI_TYPE_CONCAT)) {
-		if (b->first == a) return 1;
-		return 0;
-	}
-
-	if (a->first != b->first) return 0;
+	if (!syntax_one_prefix(a, b)) return 0;
 
 	return 1 + syntax_lcp(a->next, b->next);
 }
@@ -653,6 +662,200 @@ static cli_syntax_t *syntax_split_prefix(cli_syntax_t *a, cli_syntax_t *b, int l
 	syntax_free(a);
 	syntax_free(b);
 	return c;
+}
+
+/*
+ *	Pack the entries together,
+ *	so that there are no holes.
+ */
+static int pack_array(cli_syntax_t **nodes, int total)
+{
+	int i, j;
+
+	j = 0;
+	for (i = 1; i < total; i++) {
+		if (!j) {
+			if (!nodes[i]) {
+				j = i;
+			}
+
+			continue;
+		}
+
+		if (!nodes[i]) continue;
+
+		nodes[j] = nodes[i];
+		nodes[i] = NULL;
+		j++;
+		assert(nodes[j] == NULL);
+	}
+
+	if (j) return j;
+
+	return total;
+}
+
+
+static void recursive_prefix(cli_syntax_t **nodes, int total)
+{
+	int i, j, lcp, num_prefix;
+	int optional;
+	cli_syntax_t *a, *b, *prefix, *suffix;
+
+	if (total <= 1) return;
+
+	assert(nodes[0] != NULL);
+
+	prefix = NULL;
+
+	total = pack_array(nodes, total);
+
+	if (total <= 1) return;
+
+	assert(nodes[1] != NULL);
+
+	/*
+	 *	Check for a one-node prefix.  The returned prefix is
+	 *	NOT referenced.
+	 */
+	prefix = syntax_one_prefix(nodes[0], nodes[1]);
+
+	/*
+	 *	When there's only two entries in the array, then let
+	 *	the parent do the alternation (if there's no prefix),
+	 *	or recurse to calculate the alternation (if there's a
+	 *	prefix).
+	 */
+	if (total == 2) {
+		/*
+		 *	Let the caller deal with it.
+		 */
+		if (!prefix) return;
+
+		a = syntax_alternate(nodes[0], nodes[1]);
+		nodes[1] = NULL;
+		nodes[0] = a;
+		return;
+	}
+
+	/*
+	 *	Entries 0 and 1 don't have a common prefix.  But maybe
+	 *	entries 1, 2, ... have a common prefix.  Go check that.
+	 */
+	if (!prefix) {
+		recursive_prefix(&nodes[1], total - 1);
+		return;
+	}
+
+	/*
+	 *	We have a prefix of at least one node.  See how many
+	 *	nodes share the prefix.
+	 */
+	num_prefix = 2;
+	for (j = 2; j < total; j++) {
+		lcp = syntax_lcp(prefix, nodes[j]);
+		if (lcp == 0) {
+			num_prefix = j;
+			break;
+		}
+	}
+
+	/*
+	 *	Only the first two share the prefix.  Just do
+	 *	alternation, and then go process the rest of the input
+	 *	array.
+	 */
+	if (num_prefix == 2) {
+		a = syntax_alternate(nodes[0], nodes[1]);
+		nodes[1] = NULL;
+		nodes[0] = a;
+
+		if (total >= 4) {
+			recursive_prefix(&nodes[2], total - 2);
+		}
+		return;
+	}
+
+	/*
+	 *	We now have "num_prefix" entries in the array, which
+	 *	all have at least a one-node prefix.
+	 *
+	 *	We want to find the *longest* prefix, so we have to continue
+	 *	this process recursively.
+	 *
+	 *	We also want to avoid calling syntax_alternate(), as
+	 *	it might end up calling us recursively.  Instead, we
+	 *	just create the alternation nodes here, manually.
+	 *
+	 *	We catch the special case of optional nodes manually...
+	 */
+	prefix->refcount++;
+
+	for (i = 0; i < num_prefix; i++) {
+		suffix = syntax_skip_prefix(nodes[i], 1);
+		syntax_free(nodes[i]);
+		nodes[i] = suffix;
+	}
+
+	/*
+	 *	And now we check another special case.. optional
+	 *	arguments.  nodes[0] MAY be NULL, in which case it's really:
+	 *
+	 *	prefix [ alternation stuff ... ]
+	 */
+	if (!nodes[0]) {
+		optional = 1;
+	} else {
+		optional = 0;
+	}
+
+	/*
+	 *	We may have: (a b c | a b d | a b e)
+	 *	go check for that.  But ONLY so long as
+	 *	we have a common prefix
+	 */
+	recursive_prefix(&nodes[optional], num_prefix);
+
+	/*
+	 *	Walk back up the array, manually doing alternation,
+	 *	and skipping any NULL entries.  Once we're done,
+	 */
+	b = NULL;
+	for (i = num_prefix - 1; i >= 0; i--) {
+		if (!nodes[i]) continue;
+
+		if (!b) {
+			b = nodes[i];
+			nodes[i] = NULL;
+			continue;
+		}
+
+		a = syntax_alloc(CLI_TYPE_ALTERNATE, nodes[i], b);
+		assert(a != NULL);
+		b = a;
+		nodes[i] = NULL;
+	}
+
+	if (optional) {
+		a = syntax_alloc(CLI_TYPE_OPTIONAL, b, NULL);
+		assert(a != NULL);
+		b = a;
+	}
+
+	a = syntax_alloc(CLI_TYPE_CONCAT, prefix, b);
+	assert(a != NULL);
+	nodes[0] = a;
+
+	/*
+	 *	Only one trailing thing at the end, it can't have a
+	 *	common prefix, or we would have found it.
+	 */
+	if ((total - num_prefix) == 1) return;
+
+	/*
+	 *	Look for common prefixes of the rest of the array.
+	 */
+	recursive_prefix(&nodes[num_prefix], total - num_prefix);
 }
 
 /*
@@ -832,35 +1035,14 @@ static cli_syntax_t *syntax_alternate(cli_syntax_t *a, cli_syntax_t *b)
 	 *	Enforce LCP on nodes, via an O(N^2) algorithm.
 	 *
 	 *	FIXME: add LCS, too?  Which we care about less, to be honest.
+	 *
+	 *	FIXME: we don't really want a pair-wise LCP.  Instead, we want to
+	 *	take the common prefix (max length 1) of the first two elements,
+	 *	and then apply it to as many subsequent elemnts as possible.
+	 *	This process can be applied recursively.  The result should be
+	 *	prefixes for all nodes.
 	 */
-	for (i = 0; i < (total - 1); i++) {
-		if (!nodes[i]) continue;
-
-		for (j = i + 1; j < total; j++) {
-			int lcp;
-
-			if (!nodes[j]) continue;
-
-			lcp = syntax_lcp(nodes[i], nodes[j]);
-			if (!lcp) continue;
-
-			c = syntax_split_prefix(nodes[i], nodes[j], lcp);
-			if (!c) {
-				int k;
-
-				nodes[i] = nodes[j] = NULL;
-
-				for (k = 0; k < total; k++) {
-					if (nodes[k]) syntax_free(nodes[k]);
-				}
-				free(nodes);
-				return NULL;
-			}
-
-			nodes[j] = NULL;
-			nodes[i] = c;
-		}
-	}
+	recursive_prefix(&nodes[0], total);
 
 	/*
 	 *	Alternate all of them from the back up.
