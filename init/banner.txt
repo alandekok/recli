@@ -1,5 +1,5 @@
 Welcome to ReCLI
-Copyright (C) 2011 Alan DeKok
+Copyright (C) 2016 Alan DeKok
 
 Type "help" for help, or use '?' for context-sensitive help.
 
