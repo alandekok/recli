@@ -63,24 +63,29 @@ the `help` command, in that it either prints syntax, or
 contex-specific help.
 
 In the above example, the syntax is printed when the user types `?`.
-Additional help can be shown by changing the help text to the following:
+Additional help can be shown by adding another line after the heading,
+which has four spaces at the beginning.  That line will become the
+"short" help, which is printed when the user types `one ?`.
 
     # one
 
-    Help for "one" command
+        Enter one thing.
+
+    The "one" command does a number of things.
+    It is a very useful command.
     
     ## one fish
 
-        Enter a fish
+        Enter one fish.
     
     Help for "one fish" command.
 
-It may be difficult to see on an HTML formatted page, but the "Enter a
+It may not be obvious in an HTML formatted page, but the "Enter a
 fish" text is indented by four spaces.  This means that the text is
-help for the `?` character, and is not part of the text for the
-`help` command.
+help for the `?` character, and is not part of the text for the `help`
+command.
 
-With this help file, when the user types `one ?`, the following
+With this help file, when the user types `one fish ?`, the following
 output will be printed:
 
     fish: Enter a fish
