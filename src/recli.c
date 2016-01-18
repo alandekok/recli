@@ -292,6 +292,7 @@ int main(int argc, char **argv)
 	char *prompt_full = "";
 	char *prompt_ctx = "";
 	char const *progname;
+	char *history_file = NULL;
 	int quit = 0;
 	int context = 1;
 	char *line;
@@ -396,6 +397,9 @@ int main(int argc, char **argv)
 		snprintf(line, 2048, "/etc/recli/%s", progname);
 		config.dir = line;
 	}
+
+	history_file = malloc(2048);
+	snprintf(history_file, 2048, "%s_history.txt", progname);
 
 	if (config.dir) {
 		if (recli_bootstrap(&config) < 0) {
@@ -601,7 +605,7 @@ int main(int argc, char **argv)
 			strcpy(ctx_line_end, line);
 			linenoiseHistoryAdd(ctx_line_full);
 
-			linenoiseHistorySave("history.txt"); /* Save every new entry */
+			linenoiseHistorySave(history_file); /* Save every new entry */
 
 			if (runit && config.dir) {
 				char buffer[8192];
