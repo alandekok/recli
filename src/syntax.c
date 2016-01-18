@@ -3096,6 +3096,11 @@ redo:
 	case CLI_TYPE_EXACT:
 	case CLI_TYPE_VARARGS:
 		if (this->length == 1) return 0;
+
+		if (this->length == 2) {
+			return snprintf(buffer, len, "- %s", (char *) this->first);
+		}
+
 		return snprintf(buffer, len, "%s", (char *) this->first);
 
 	case CLI_TYPE_CONCAT:
@@ -3107,9 +3112,9 @@ redo:
 
 		buffer += outlen;
 		len -= outlen;
-		strcpy(buffer, ": ");
-		buffer += 2;
-		len -= 2;
+		*buffer = ' ';
+		buffer++;
+		len--;
 		return outlen + syntax_sprintf_word(buffer, len, this->next);
 
 	case CLI_TYPE_OPTIONAL:
@@ -3174,7 +3179,7 @@ show_help:
 			for (i = 0; i < argc; i++) {
 				recli_fprintf(recli_stdout, "%s ", argv[i]);
 			}
-			recli_fprintf(recli_stdout, " - %s", buffer);
+			recli_fprintf(recli_stdout, "%s", buffer);
 		}
 
 		this = this->next;
@@ -3191,6 +3196,6 @@ show_help:
 
 	}	
 
-	recli_fprintf(recli_stdout, " - %s", buffer);
+	recli_fprintf(recli_stdout, "%s", buffer);
 	return 1;
 }
