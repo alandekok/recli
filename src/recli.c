@@ -411,6 +411,10 @@ int main(int argc, char **argv)
 		syntax_printf(config.syntax);printf("\r\n");
 	}
 
+	if (!config.dir && !config.banner && tty) {
+		recli_fprintf(recli_stdout, "Welcome to ReCLI\nCopyright (C) 2016 Alan DeKok\n\nType \"help\" for help, or use '?' for context-sensitive help.\n");
+	}	
+
 	if (quit) goto done;
 
 #ifdef SIGPIPE
