@@ -3046,8 +3046,6 @@ const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
 		assert(a->type == CLI_TYPE_CONCAT);
 		assert(b->type == CLI_TYPE_EXACT);
 
-		if (strcmp(argv[i], (char *) b->first) != 0) break;
-
 		a = a->next;
 	}
 
@@ -3105,8 +3103,6 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 		b = a->first;
 		assert(a->type == CLI_TYPE_CONCAT);
 		assert(b->type == CLI_TYPE_EXACT);
-
-		if (strcmp(argv[i], (char *) b->first) != 0) break;
 
 		a = a->next;
 	}
