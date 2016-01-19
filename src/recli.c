@@ -196,7 +196,6 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 		suffix = syntax_skip_prefix(match, argc);
 		if (!suffix) exit(1);
 
-		fprintf(recli_stdout, "... ");
 		syntax_print_lines(suffix);
 		syntax_free(suffix);
 		syntax_free(match);
