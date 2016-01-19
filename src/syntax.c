@@ -1231,6 +1231,11 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		a = first;
 
 		/*
+		 *	Help text MUST be at the end of a concatenation string.
+		 */
+		if (a->type == CLI_TYPE_EXACT) assert(a->length == 0);
+
+		/*
 		 *	concat(concat(a,b),c) ==> concat(a,concat(b,c))
 		 */
 		if (a->type == CLI_TYPE_CONCAT) {
@@ -2860,7 +2865,7 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 
 	this = syntax_alloc(CLI_TYPE_CONCAT, last, this);
 	assert(this != NULL);
-	
+
 	if (!*phead) {
 		*phead = this;
 	} else {
@@ -3023,179 +3028,108 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
  */
 const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[])
 {
-	int rcode;
-	const char *help = NULL;
-	cli_syntax_t *this, *tail;
-	cli_match_t match;
+	int i;
+	cli_syntax_t *help, *a, *b;
 
 	if (!head || (argc < 0)) return NULL;
 
-	if (argc == 0) {
-		head->refcount++;
-		tail = head;
-		goto show_help;
-	}
-
-	memset(&match, 0, sizeof(match));
-	match.ptr = 0;
-	match.argc = argc;
-	match.word = &match.stack[0];
-	match.word->start_argc = argc;
-	match.word->argc = argc;
-	match.word->argv = argv;
-	match.word->match = 0;
-
-	rcode = syntax_walk_all(head, &match, syntax_match_pre,
-				syntax_match_in, syntax_match_post);
-			     
-	if (!rcode) return NULL;
-
-	if (match.stack[0].argc != 0) return NULL;
-
-	if (!match.stack[0].want_more) return NULL;
+	help = syntax_match_max(head, argc, argv);
+	if (!help) return NULL;
 
 	/*
-	 *	And duplicate a lot of the above work because
-	 *	the function returns the wrong "fail".
+	 *	Skip the prefix
 	 */
-	this = syntax_match_max(head, argc, argv);
-	tail = syntax_skip_prefix(this, argc);
-	assert(tail != NULL);
-	syntax_free(this);
+	a = help;
 
-show_help:
-	this = tail;
+	for (i = 0; i < argc; i++) {
+		b = a->first;
+		assert(a->type == CLI_TYPE_CONCAT);
+		assert(b->type == CLI_TYPE_EXACT);
 
-	while (this->type == CLI_TYPE_ALTERNATE) {
-		cli_syntax_t *first = tail->first;
-		if ((first->type == CLI_TYPE_EXACT) &&
-		    (first->length == 1)) { /* long help */
-			this = first;
-			break;
+		a = a->next;
+	}
+
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		b = a->first;
+
+		if ((b->type == CLI_TYPE_EXACT) && (b->length == 1)) {
+			syntax_free(help);
+			return (char *) b->first;
 		}
 
-		this = this->next;
+		a = a->next;
 	}
 
-	if ((this->type == CLI_TYPE_EXACT) &&
-	    (this->length == 1)) {
-		help = this->first;
+	b = a;
+
+	if ((b->type == CLI_TYPE_EXACT) && (b->length == 1)) {
+		syntax_free(help);
+		return (char *) b->first;
 	}
 
-	syntax_free(tail);
-	return help;
-}
+	syntax_free(help);
 
-static size_t syntax_sprintf_word(char *buffer, size_t len, cli_syntax_t *this)
-{
-	size_t outlen;
-	cli_syntax_t *next;
-
-redo:
-	switch (this->type) {
-	case CLI_TYPE_EXACT:
-	case CLI_TYPE_VARARGS:
-		if (this->length == 1) return 0;
-
-		if (this->length == 2) {
-			return snprintf(buffer, len, "- %s", (char *) this->first);
-		}
-
-		return snprintf(buffer, len, "%s", (char *) this->first);
-
-	case CLI_TYPE_CONCAT:
-		next = this->next;
-		if ((next->type != CLI_TYPE_EXACT) ||
-		    (next->length != 2)) return 0;
-		outlen = syntax_sprintf_word(buffer, len, this->first);
-		if (outlen == 0) return 0;
-
-		buffer += outlen;
-		len -= outlen;
-		*buffer = ' ';
-		buffer++;
-		len--;
-		return outlen + syntax_sprintf_word(buffer, len, this->next);
-
-	case CLI_TYPE_OPTIONAL:
-	case CLI_TYPE_KEY:
-	case CLI_TYPE_PLUS:
-		this = this->first;
-		goto redo;
-
-	default:
-		return 0;
-	}
-
+	return NULL;
 }
 
 int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 {
 	int i;
-	size_t len;
-	cli_syntax_t *this, *tail;
-	cli_match_t match;
+	size_t len, bufsize;
+	cli_syntax_t *help, *a, *b;
+	char *p;
 	char buffer[1024];
 
 	if (!head || (argc < 0)) return -1;
 
-	if (argc == 0) {
-		head->refcount++;
-		tail = head;
-		goto show_help;
-	}
+	help = syntax_match_max(head, argc, argv);
+	if (!help) return -1;
 
-	memset(&match, 0, sizeof(match));
-	match.ptr = 0;
-	match.argc = argc;
-	match.word = &match.stack[0];
-	match.word->start_argc = argc;
-	match.word->argc = argc;
-	match.word->argv = argv;
-	match.word->match = 0;
-
-	syntax_walk_all(head, &match, syntax_match_pre,
-				syntax_match_in, syntax_match_post);
-			     
-//	if (!rcode) return -1;
-
-	if (match.stack[0].argc != 0) return -1;
-
-	if (!match.stack[0].want_more) return -1;
-
-	this = syntax_match_max(head, argc, argv);
-	tail = syntax_skip_prefix(this, argc);
-	assert(tail != NULL);
-	syntax_free(this);
-
-show_help:
-	this = tail;
-
-	while (this->type == CLI_TYPE_ALTERNATE) {
-		len = syntax_sprintf_word(buffer, sizeof(buffer),
-					  this->first);
-
-		if (len != 0) {
-			for (i = 0; i < argc; i++) {
-				recli_fprintf(recli_stdout, "%s ", argv[i]);
-			}
-			recli_fprintf(recli_stdout, "%s", buffer);
-		}
-
-		this = this->next;
-	}
-
-	assert(this->type != CLI_TYPE_ALTERNATE);
-
-	syntax_free(tail);
-	len = syntax_sprintf_word(buffer, sizeof(buffer), this);
-	if (len == 0) return 0;
+	p = buffer;
+	bufsize = sizeof(buffer);
 
 	for (i = 0; i < argc; i++) {
-		recli_fprintf(recli_stdout, "%s ", argv[i]);
-
+		len = snprintf(p, bufsize, "%s ", argv[i]);
+		p += len;
+		bufsize -= len;
 	}
 
-	recli_fprintf(recli_stdout, "%s", buffer);
-	return 1;
+	/*
+	 *	Skip the prefix
+	 */
+	a = help;
+
+	for (i = 0; i < argc; i++) {
+		b = a->first;
+		assert(a->type == CLI_TYPE_CONCAT);
+		assert(b->type == CLI_TYPE_EXACT);
+
+		a = a->next;
+	}
+
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		b = a->first;
+
+		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
+			recli_fprintf(recli_stdout, "%s- %s",
+				      buffer, (char *) b->first);
+			syntax_free(help);
+			return 1;
+		}
+
+		a = a->next;
+	}
+
+	b = a;
+
+	if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
+		recli_fprintf(recli_stdout, "%s- %s",
+			      buffer, (char *) b->first);
+		syntax_free(help);
+		return 1;
+	}
+
+	syntax_free(help);
+
+	return 0;
 }
