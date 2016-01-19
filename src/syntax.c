@@ -3102,10 +3102,17 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	a = help;
 
 	for (i = 0; i < argc; i++) {
-		b = a->first;
-		assert(a->type == CLI_TYPE_CONCAT);
-		assert(b->type == CLI_TYPE_EXACT);
+		if (a->type != CLI_TYPE_CONCAT) {
+			if (i != (argc - 1)) {
+				syntax_free(help);
+				return 0;
+			}
+			break;
+		}
 
+		b = a->first;
+
+		assert(b->type == CLI_TYPE_EXACT);
 		a = a->next;
 	}
 
@@ -3201,8 +3208,15 @@ int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *ar
 	a = help;
 
 	for (i = 0; i < argc; i++) {
+		if (a->type != CLI_TYPE_CONCAT) {
+			if (i != (argc - 1)) {
+				syntax_free(help);
+				return 0;
+			}
+			break;
+		}
+
 		b = a->first;
-		assert(a->type == CLI_TYPE_CONCAT);
 		assert(b->type == CLI_TYPE_EXACT);
 
 		a = a->next;
