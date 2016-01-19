@@ -301,17 +301,6 @@ int main(int argc, char **argv)
 	linenoiseSetCompletionCallback(completion);
 #endif
 
-	/*
-	 *	TODO: configurably load the history.
-	 *	TODO: limit the size of the history.
-	 *	TODO: rename it to ~/.recli_history?
-	 */
-	linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
-	linenoiseSetCharacterCallback(foundspace, ' ');
-	linenoiseSetCharacterCallback(foundquote, '"');
-	linenoiseSetCharacterCallback(foundquote, '\'');
-	linenoiseSetCharacterCallback(foundhelp, '?');
-
 	recli_stdout = stdout;
 	recli_stderr = stderr;
 
@@ -396,6 +385,18 @@ int main(int argc, char **argv)
 
 	history_file = malloc(2048);
 	snprintf(history_file, 2048, "%s_history.txt", progname);
+
+	linenoiseHistoryLoad(history_file); /* Load the history at startup */
+
+	/*
+	 *	TODO: configurably load the history.
+	 *	TODO: limit the size of the history.
+	 *	TODO: rename it to ~/.recli_history?
+	 */
+	linenoiseSetCharacterCallback(foundspace, ' ');
+	linenoiseSetCharacterCallback(foundquote, '"');
+	linenoiseSetCharacterCallback(foundquote, '\'');
+	linenoiseSetCharacterCallback(foundhelp, '?');
 
 	if (config.dir) {
 		if (recli_bootstrap(&config) < 0) {
