@@ -1918,6 +1918,8 @@ static int syntax_prefix_words(int argc, char *argv[],
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+		if (this->next) return 0;
+
 	case CLI_TYPE_VARARGS:
 		argv[0] = this->first;
 		return 1;
