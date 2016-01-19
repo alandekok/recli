@@ -3194,7 +3194,7 @@ show_help:
 	for (i = 0; i < argc; i++) {
 		recli_fprintf(recli_stdout, "%s ", argv[i]);
 
-	}	
+	}
 
 	recli_fprintf(recli_stdout, "%s", buffer);
 	return 1;
