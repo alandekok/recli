@@ -29,6 +29,6 @@ done
 
 #
 #  Do this as an atomic operation.  Other people may be using
-#  the CLI at the same time!x
+#  the CLI at the same time!
 #
 mv ${RECLI_DIR}/cache/syntax.txt.$$ ${RECLI_DIR}/cache/syntax.txt
