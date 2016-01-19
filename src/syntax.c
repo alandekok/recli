@@ -3111,7 +3111,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 		b = a->first;
 
 		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-			recli_fprintf(recli_stdout, "%s- %s",
+			recli_fprintf(recli_stdout, "%s- %s\n",
 				      buffer, (char *) b->first);
 			syntax_free(help);
 			return 1;
@@ -3127,6 +3127,99 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 			      buffer, (char *) b->first);
 		syntax_free(help);
 		return 1;
+	}
+
+	syntax_free(help);
+
+	return 0;
+}
+
+static void syntax_help_subcommand(char const *start, cli_syntax_t *a)
+{
+	char const *name = NULL;
+	cli_syntax_t *b;
+
+	if (a->type != CLI_TYPE_CONCAT) return;
+
+	b = a->first;
+	if (b->type != CLI_TYPE_EXACT) return;
+	if (b->length != 0) return;
+
+	name = (char *) b->first;
+
+	a = a->next;
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		b = a->first;
+
+		/*
+		 *	The short help text already has a trailing CR/LF
+		 */
+		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
+			recli_fprintf(recli_stdout, "%s%s - %s", start, name, (char *) b->first);
+			return;
+		}
+
+		a = a->next;
+	}
+
+	b = a;
+
+	if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
+		recli_fprintf(recli_stdout, "%s%s - %s", start, name, (char *) b->first);
+		return;
+	}
+}
+
+
+int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *argv[])
+{
+	int i;
+	size_t len, bufsize;
+	cli_syntax_t *help, *a, *b;
+	char *p;
+	char buffer[1024];
+
+	if (!head || (argc < 0)) return -1;
+
+	help = syntax_match_max(head, argc, argv);
+	if (!help) return -1;
+
+	p = buffer;
+	bufsize = sizeof(buffer);
+
+	if (argc != 0) {
+		len = snprintf(p, bufsize, "... ");
+		p += len;
+		bufsize -= len;
+	}
+
+	/*
+	 *	Skip the prefix
+	 */
+	a = help;
+
+	for (i = 0; i < argc; i++) {
+		b = a->first;
+		assert(a->type == CLI_TYPE_CONCAT);
+		assert(b->type == CLI_TYPE_EXACT);
+
+		a = a->next;
+	}
+
+	while (a->type == CLI_TYPE_ALTERNATE) {
+		b = a->first;
+
+		if (b->type != CLI_TYPE_EXACT) {
+			syntax_help_subcommand(buffer, b);
+		}
+
+		a = a->next;
+	}
+
+	b = a;
+
+	if (b->type != CLI_TYPE_EXACT) {
+		syntax_help_subcommand(buffer, b);
 	}
 
 	syntax_free(help);

@@ -210,11 +210,8 @@ static int foundhelp(const char *buf, size_t len, UNUSED char c)
 
 	} else {
 
-		match = syntax_match_max(config.syntax, argc, argv);
-		if (match) {
-			syntax_free(match);
-			syntax_print_context_help(config.help, argc, argv);
-		}
+		syntax_print_context_help(config.help, argc, argv);
+		syntax_print_context_help_subcommands(config.help, argc, argv);
 	}
 	
 	return 1;
