@@ -14,6 +14,8 @@ then
   RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
 fi
 
+[ -d ${RECLI_DIR}/plugins ] || exit 0
+
 # print out configuration
 case "$1" in
   --config)
