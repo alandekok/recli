@@ -328,16 +328,16 @@ static void setCursorPos(struct current *current, int x)
  */
 static int fd_read_char(int fd, int timeout)
 {
+    int rcode;
     struct pollfd p;
     unsigned char c;
 
     p.fd = fd;
     p.events = POLLIN;
 
-    if (poll(&p, 1, timeout) == 0) {
-        /* timeout */
-        return -1;
-    }
+    rcode = poll(&p, 1, timeout);
+    if (rcode <= 0) return -1;	/* timeout or interrupt */
+
     if (read(fd, &c, 1) != 1) {
         return -1;
     }
@@ -973,7 +973,11 @@ static int linenoisePrompt(struct current *current) {
 #endif
 
 process_char:
-        if (c == -1) return current->len;
+        if (c == -1) {
+	    set_current(current, "");
+            return 0;
+	}
+
 #ifdef USE_TERMIOS
         if (c == 27) {   /* escape sequence */
             c = check_special(current->fd);
