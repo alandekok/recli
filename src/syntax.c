@@ -2469,12 +2469,15 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 			if (!((cli_syntax_parse_t)this->next)(word)) {
 				return NULL; /* failed to match */
 			}
-		} else
 
-		if (strcmp((char *)this->first, word) != 0) {
-			if (sense == CLI_MATCH_EXACT) return NULL; /* failed to match */
-			if (strncmp((char *)this->first,
-				    word, strlen(word)) != 0) return NULL; /* failed to match */
+		} else if (sense == CLI_MATCH_EXACT) {
+			if (strcmp((char *)this->first, word) != 0) {
+				return NULL;
+			}
+		} else {
+			if (strncmp((char *)this->first, word, strlen(word)) != 0) {
+				return NULL;
+			}
 		}
 
 		this->refcount++;
@@ -2644,40 +2647,35 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 
 	if (!head) return 0;	/* no syntax checking */
 
-	this = head;
-	this->refcount++;
-
 	memcpy(mybuf, in, len + 1);
 	argc = str2argv(mybuf, len, 256, argv);
 	if (argc == 0) return 0;
+
+	this = head;
+	this->refcount++;	/* so we can free it later */
 
 	match = 0;
 	exact = CLI_MATCH_EXACT;
 
 	while (this && (match < argc)) {
+		if ((match + 1) == argc) exact = CLI_MATCH_PREFIX;
+
+		/*
+		 *	Check if any ONE word matches.
+		 */
 		next = syntax_match_word(argv[match], exact, this, NULL);
 		if (!next) {
-			/* no match, last word, stop */
-			if ((match + 1) != argc) {
-			none:
-				syntax_free(this);
-				return 0;
-			}
+			syntax_free(this);
+			return 0;
+		}
 
-			if (exact != CLI_MATCH_EXACT) goto none;
-
-			exact = CLI_MATCH_PREFIX;
-			continue;
+		if (exact != CLI_MATCH_EXACT) {
+			syntax_free(next);
+			next = NULL;
+			break;
 		}
 
 		syntax_free(this);
-
-		if (exact != CLI_MATCH_EXACT) {
-			this = next;
-			next = NULL;
-			assert((match + 1) == argc);
-			break;
-		}
 
 		this = syntax_skip_prefix(next, 1);
 		assert(this != next);
@@ -2694,22 +2692,6 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 	for (i = 0; i < match; i++) {
 		out = snprintf(p, buffer + sizeof(buffer) - p, "%s ", argv[i]);
 		p += out;
-	}
-
-	if (exact == CLI_MATCH_PREFIX) {
-		if (this->type == CLI_TYPE_CONCAT) {
-			next = this->first;
-		} else {
-			next = this;
-		}
-
-		assert(next->type == CLI_TYPE_EXACT);
-
-		snprintf(p, buffer + sizeof(buffer) - p, "%s ",
-			 (char *) next->first);
-		tabs[0] = strdup(buffer);
-		syntax_free(this);
-		return 1;
 	}
 
 	if (!this) return 0;
