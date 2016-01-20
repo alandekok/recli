@@ -903,6 +903,11 @@ static int completeLine(struct current *current) {
 
             switch(c) {
                 case '\t': /* tab */
+		   if (lc.len == 1) {
+			   set_current(current,lc.cvec[0]);
+			   break;
+		    }
+
                     i = (i+1) % (lc.len+1);
                     if (i == lc.len) beep();
                     break;
@@ -916,7 +921,7 @@ static int completeLine(struct current *current) {
                 default:
                     /* Update buffer and return */
                     if (i < lc.len) {
-                        set_current(current,lc.cvec[i]);
+			    set_current(current,lc.cvec[i]);
                     }
                     stop = 1;
                     break;
