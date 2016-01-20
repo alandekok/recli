@@ -1902,11 +1902,14 @@ int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
 	return 1;
 }
 
+#define CLI_MATCH_EXACT   (0)
+#define CLI_MATCH_PREFIX  (1)
+
 
 /*
  *	Returns a NEW ref which matches the word
  */
-static int syntax_prefix_words(int argc, char *argv[],
+static int syntax_prefix_words(int argc, char *argv[], char const *word, int sense,
 			       cli_syntax_t *this, cli_syntax_t *next)
 {
 	int matches, total;
@@ -1920,19 +1923,23 @@ static int syntax_prefix_words(int argc, char *argv[],
 	case CLI_TYPE_EXACT:
 		if (this->next) return 0;
 
+		if (sense == CLI_MATCH_PREFIX) {
+			if (strncmp((char *) this->first, word, strlen(word)) != 0) return 0;
+		}
+
 	case CLI_TYPE_VARARGS:
 		argv[0] = this->first;
 		return 1;
 
 	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
-		matches = syntax_prefix_words(argc, argv, this->first, next);
+		matches = syntax_prefix_words(argc, argv, word, sense, this->first, next);
 		argc -= matches;
 		argv += matches;
 
 		if (!next) return matches;
 
-		return matches + syntax_prefix_words(argc, argv, next, NULL);
+		return matches + syntax_prefix_words(argc, argv, word, sense, next, NULL);
 
 	case CLI_TYPE_CONCAT:
 		a = this->next;
@@ -1942,14 +1949,14 @@ static int syntax_prefix_words(int argc, char *argv[],
 			a = syntax_alloc(CLI_TYPE_CONCAT, this->next, next);
 			assert(a != this);
 		}
-		matches = syntax_prefix_words(argc, argv, this->first, a);
+		matches = syntax_prefix_words(argc, argv, word, sense, this->first, a);
 		if (next) syntax_free(a);
 		return matches;
 
 	case CLI_TYPE_ALTERNATE:
 		total = 0;
 		while (this->type == CLI_TYPE_ALTERNATE) {
-			matches = syntax_prefix_words(argc, argv,
+			matches = syntax_prefix_words(argc, argv, word, sense,
 						      this->first, next);
 			argc -= matches;
 			argv += matches;
@@ -1958,7 +1965,7 @@ static int syntax_prefix_words(int argc, char *argv[],
 		}
 		assert(this->type != CLI_TYPE_ALTERNATE);
 
-		return total + syntax_prefix_words(argc, argv, this, next);
+		return total + syntax_prefix_words(argc, argv, word, sense, this, next);
 
 	default:
 		break;
@@ -2167,9 +2174,6 @@ static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 
 	return 1;
 }
-
-#define CLI_MATCH_EXACT   (0)
-#define CLI_MATCH_PREFIX  (1)
 
 
 /*
@@ -2642,6 +2646,7 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 	size_t out;
 	cli_syntax_t *this, *next;
 	char *argv[256];
+	char *word;
 	char *p, buffer[256];
 	char mybuf[1024];
 
@@ -2690,7 +2695,14 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 	out = 0;
 	p = buffer;
 	match = argc;
-	if (exact != CLI_MATCH_EXACT) match--;
+
+	if (this && (exact == CLI_MATCH_PREFIX)) {
+		match--;
+
+		word = strdup(argv[match]);
+	} else {
+		word = NULL;
+	}
 
 	for (i = 0; i < match; i++) {
 		out = snprintf(p, buffer + sizeof(buffer) - p, "%s ", argv[i]);
@@ -2699,16 +2711,18 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 
 	if (!this) return 0;
 
-	argc = syntax_prefix_words(256, argv, this, NULL);
+	argc = syntax_prefix_words(256, argv, word, exact, this, NULL);
 	if (argc > max_tabs) argc = max_tabs;
 
 	for (i = 0; i < argc; i++) {
 		assert(argv[i] != NULL);
 		strcpy(p, argv[i]);
+		strcat(p, " ");
 		tabs[i] = strdup(buffer);
 	}
 
 	syntax_free(this);
+	free(word);
 
 	return argc;
 }
