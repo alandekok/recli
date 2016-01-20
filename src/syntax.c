@@ -2658,12 +2658,15 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 	exact = CLI_MATCH_EXACT;
 
 	while (this && (match < argc)) {
-		if ((match + 1) == argc) exact = CLI_MATCH_PREFIX;
-
 		/*
 		 *	Check if any ONE word matches.
 		 */
 		next = syntax_match_word(argv[match], exact, this, NULL);
+		if (!next && ((match + 1) == argc)) {
+			exact = CLI_MATCH_PREFIX;
+			next = syntax_match_word(argv[match], exact, this, NULL);
+		}
+
 		if (!next) {
 			syntax_free(this);
 			return 0;
