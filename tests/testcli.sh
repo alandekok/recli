@@ -14,7 +14,7 @@ fi
 
 if [ -f "$1.norm" ]
 then
-  ../src/recli -s $SYNTAX -qX syntax > $1.tmp 2>&1
+  ../src/recli -s $SYNTAX -qX syntax < /dev/null > $1.tmp 2>&1
   if [ "$?" != "0" ]
   then
      echo "FAILED syntax parser: $1"
