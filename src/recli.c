@@ -383,16 +383,18 @@ int main(int argc, char **argv)
 		config.dir = line;
 	}
 
-	history_file = malloc(2048);
-	snprintf(history_file, 2048, "%s_history.txt", progname);
+	if (tty) {
+		/*
+		 *	TODO: configurably load the history.
+		 *	TODO: limit the size of the history.
+		 *	TODO: rename it to ~/.recli_history?
+		 */
+		history_file = malloc(2048);
+		snprintf(history_file, 2048, "%s_history.txt", progname);
 
-	linenoiseHistoryLoad(history_file); /* Load the history at startup */
+		linenoiseHistoryLoad(history_file); /* Load the history at startup */
+	}
 
-	/*
-	 *	TODO: configurably load the history.
-	 *	TODO: limit the size of the history.
-	 *	TODO: rename it to ~/.recli_history?
-	 */
 	linenoiseSetCharacterCallback(foundspace, ' ');
 	linenoiseSetCharacterCallback(foundquote, '"');
 	linenoiseSetCharacterCallback(foundquote, '\'');
@@ -600,13 +602,16 @@ int main(int argc, char **argv)
 			}
 
 		add_line:
-			/*
-			 *	Save the FULL text in the history.
-			 */
-			strcpy(ctx_line_end, line);
-			linenoiseHistoryAdd(ctx_line_full);
+			if (tty) {
+				/*
+				 *	Save the FULL text in the history.
+				 */
+				strcpy(ctx_line_end, line);
 
-			linenoiseHistorySave(history_file); /* Save every new entry */
+				linenoiseHistoryAdd(ctx_line_full);
+
+				linenoiseHistorySave(history_file); /* Save every new entry */
+			}
 
 			if (runit && config.dir) {
 				char buffer[8192];
