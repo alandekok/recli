@@ -2282,6 +2282,10 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 	int words, rcode;
 	cli_syntax_t *a;
 
+	if (!head || (argc < 0)) return -1;
+
+	if (!argc) return 0;
+
 	a = head;
 
 	switch (a->type) {
