@@ -2284,8 +2284,6 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	if (!head || (argc < 0)) return -1;
 
-	if (!argc) return 0;
-
 	a = head;
 
 	switch (a->type) {
@@ -2310,6 +2308,8 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		return argc; /* eat all of the following arguments */
 
 	case CLI_TYPE_OPTIONAL:
+		if (!argc) return 0; /* that's OK. */
+
 		/*
 		 *	If it didn't match, we return "no words for us".
 		 */
