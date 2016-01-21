@@ -2175,283 +2175,6 @@ static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 	return 1;
 }
 
-
-/*
- *	Match a word against a syntax tree.
- */
-static int syntax_match_exact(const char *word, cli_syntax_t *this, int sense)
-{
-	if (this->next) {
-		return ((cli_syntax_parse_t)this->next)(word);
-	}
-
-	if (strcmp((char *)this->first, word) != 0) {
-		if (sense == CLI_MATCH_EXACT) return 0;
-		if (strncmp((char *)this->first,
-			    word, strlen(word)) != 0) return 0;
-	}
-
-	return 1;
-}
-
-
-/*
- *	Walk over a tree, matching argv[] to a tree.
- */
-typedef struct cli_match_word_t {
-	int start_argc;
-	int argc;
-	char **argv;
-	int match;
-	int repeat;
-	int want_more;
-	int fail_argc;
-	cli_syntax_t *fail;
-	cli_syntax_t *key;
-} cli_match_word_t;
-
-typedef struct cli_match_found_t {
-	const char *word;
-	const char *type;
-	cli_syntax_t *key;
-} cli_match_found_t;
-
-typedef struct cli_match_t {
-	int argc, ptr;
-	cli_match_word_t *word;
-	cli_match_word_t stack[32];
-	cli_match_found_t found[64];
-} cli_match_t;
-
-#if 0
-#define TRACE_MATCH syntax_debug(__FUNCTION__, this)
-#define TRACE_MATCH_MSG(_x) syntax_debug(_x, this)
-#else
-#define TRACE_MATCH
-#define TRACE_MATCH_MSG(_x)
-#endif
-
-static int syntax_match_pre(void *ctx, cli_syntax_t *this)
-{
-	cli_match_t *m = ctx;
-
-	TRACE_MATCH;
-
-	assert(m->ptr >= 0);
-	assert(m->word->argc >= 0);
-
-	switch (this->type) {
-	case CLI_TYPE_OPTIONAL:
-		if (m->word->argc == 0) {
-			m->word->match = 1;
-			return CLI_WALK_SKIP;
-		}
-
-	case CLI_TYPE_ALTERNATE:
-		m->stack[m->ptr + 1] = m->stack[m->ptr];
-		m->stack[m->ptr + 1].start_argc = m->stack[m->ptr].argc;
-		assert(m->stack[m->ptr].argc >= 0);
-		goto fix;
-
-	case CLI_TYPE_CONCAT:
-	case CLI_TYPE_KEY:
-		m->stack[m->ptr + 1] = m->stack[m->ptr];
-		assert(m->stack[m->ptr].argc >= 0);
-	fix:
-		m->ptr++;
-		m->word = m->stack + m->ptr;
-		assert(m->word->argc >= 0);
-		m->word->match = 0;
-		if (this->type == CLI_TYPE_KEY) {
-			m->word->key = this;
-		}
-		break;
-
-	case CLI_TYPE_PLUS:
-	case CLI_TYPE_EXACT:
-	case CLI_TYPE_VARARGS:
-		break;
-
-	default:
-		return 0;
-	}
-
-	return 1;
-}
-
-/*
- *	Callback when we're matching in a node.
- */
-static int syntax_match_in(void *ctx, cli_syntax_t *this)
-{
-	int offset;
-	cli_match_t *m = ctx;
-
-	TRACE_MATCH;
-
-	assert(m->word->argc >= 0);
-
-	switch (this->type) {
-	case CLI_TYPE_PLUS:
-		if (m->word->want_more) {
-			m->word->repeat = 0;
-			break;
-		}
-
-		if (m->word->argc == 0) {
-			m->word->repeat = 0;
-			m->word->want_more = 0;
-			break;
-		}
-
-		if (m->word->match) { /* matches, try again */
-			m->word->start_argc = m->word->argc;
-			m->word->repeat = 1;
-			m->word->want_more = 0;
-			return CLI_WALK_REPEAT;
-		}
-		
-		if (m->word->repeat) { /* at least one was found, stop */
-			m->word->repeat = 0;
-			m->word->match = 1;
-			m->word->want_more = 0;
-			break; 
-		}
-		break;
-
-	case CLI_TYPE_KEY:
-		assert(m->word->key == this);
-
-	case CLI_TYPE_CONCAT:
-		assert(m->ptr >= 0);
-		if (!m->word->match) return CLI_WALK_SKIP;
-		break;
-
-	case CLI_TYPE_ALTERNATE:
-		if ((m->word->match) ||
-		    (m->word->argc != m->word->start_argc)) {
-			return CLI_WALK_SKIP;
-		}
-		m->word->match = 2;
-		break;
-
-	case CLI_TYPE_OPTIONAL:
-		if (m->word->match) break;
-		m->word->match = 2;
-		break;
-
-	case CLI_TYPE_VARARGS:
-		/*
-		 *	Nothing more is OK.
-		 */
-		if (m->word->argc == 0) {
-			m->word->want_more = 0;
-			break;
-		}
-
-		/*
-		 *	Eat ALL of the remaining words.
-		 */
-		m->word->argv -= m->word->argc;
-		m->word->argc = 0;
-		break;
-
-	case CLI_TYPE_EXACT:
-		if (m->word->argc == 0) {
-			m->word->match = 1;
-			m->word->want_more = 1;
-			m->word->fail = this;
-			break; /* FIXME: skip? */
-		}
-
-		m->word->match = syntax_match_exact(m->word->argv[0], this,
-						    CLI_MATCH_EXACT);
-
-		offset = m->argc - m->word->argc;
-		m->found[offset].word = m->word->argv[0];
-		if (!this->next) {
-			m->found[offset].type = NULL;
-		} else {
-			m->found[offset].type = this->first;
-		}
-		m->found[offset].key = m->word->key;
-
-		if (m->word->match) {
-			TRACE_MATCH_MSG("MATCH");
-			assert(m->word->argc > 0);
-			m->word->argc--;
-			m->word->argv++;
-		} else if (!m->word->fail) {
-			m->word->fail_argc = m->word->argc;
-			m->word->fail = this;
-		}
-		m->word->want_more = 0;
-		break;
-
-	default:
-		return 0;
-	}
-
-	return 1;
-}
-
-
-static int syntax_match_post(void *ctx, cli_syntax_t *this)
-{
-	cli_match_t *m = ctx;
-
-	TRACE_MATCH;
-
-	assert(m->ptr >= 0);
-	assert(m->word->argc >= 0);
-
-	switch (this->type) {
-	case CLI_TYPE_KEY:
-		m->word->key = NULL;
-
-	case CLI_TYPE_PLUS:
-	case CLI_TYPE_CONCAT:
-	case CLI_TYPE_ALTERNATE:
-	case CLI_TYPE_OPTIONAL:
-
-		if (m->word->match > 0) {
-#undef COPY
-#define COPY(_x) m->stack[m->ptr - 1]._x = m->word->_x
-			COPY(argc);
-			COPY(argv);
-			COPY(want_more);
-			COPY(fail_argc);
-			COPY(fail);
-			/* NOT the key field */
-
-			if (this->next && (m->word->match == 2) &&
-			    (((cli_syntax_t *)this->next)->type != this->type)) {
-				m->word->match = 0;
-			}
-
-			COPY(match);
-
-		} else if (m->word->start_argc > m->word->fail_argc) {
-			COPY(fail_argc);
-			COPY(fail);
-		}
-
-		m->ptr--;
-		m->word = m->stack + m->ptr;
-		assert(m->word->argc >= 0);
-		break;
-
-	case CLI_TYPE_EXACT:
-	case CLI_TYPE_VARARGS:
-		break;
-
-	default:
-		return 0;
-	}
-
-	return 1;
-}
-
 /*
  *	Returns a NEW ref which matches the word
  */
@@ -2541,44 +2264,118 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 
 /*
  *	Check argv against a syntax.
+ *
+ *	Returns:
+ *
+ *	-N		syntax error (or match failure) in argument N
+ *	0		argc was zero
+ *	N < argc	a partial command
+ *	N = argc	a full command can be executed
+ *	N > argc        we want more argc to run a full command
+ *
+ *	want_more is set if we matched, but needed more input.
+ *	i.e. argc == 0, but we still have nodes to match.
  */
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 const char **fail)
 {
-	int rcode;
-	cli_match_t match;
+	int words, rcode;
+	cli_syntax_t *a;
 
-	if (!head || !argc) return 1;	/* no syntax checking */
+	a = head;
 
-	if (argc < 0) return -1;
+	switch (a->type) {
+	case CLI_TYPE_EXACT:
+		if (argc == 0) return 1; /* want one more argument */
 
-	memset(&match, 0, sizeof(match));
-	match.ptr = 0;
-	match.argc = argc;
-	match.word = &match.stack[0];
-	match.word->start_argc = argc;
-	match.word->argc = argc;
-	match.word->argv = argv;
-	match.word->match = 0;
+		if (a->next) { /* call syntax checker */
+			if (((cli_syntax_parse_t)a->next)(argv[0])) {
+				return 1;
+			}
 
-	rcode = syntax_walk_all(head, &match, syntax_match_pre,
-				syntax_match_in, syntax_match_post);
-			     
-//	if (!rcode) return -1;	/* failure walking the tree */
-
-	if (match.stack[0].want_more) return 0;  /* matched some, not all */
-
-	if (match.stack[0].argc != 0) {
-		rcode = argc - match.stack[0].fail_argc;
-
-		if (match.stack[0].fail) {
-			*fail = argv[rcode];
+		} else if (strcmp((char *)a->first, argv[0]) == 0) {
+			return 1;
 		}
 
-		return -1;
+		*fail = argv[0];
+		return -1;	/* didn't match */
+
+	case CLI_TYPE_VARARGS:
+		if (argc == 0) return 1; /* want one more argument */
+
+		return argc; /* eat all of the following arguments */
+
+	case CLI_TYPE_OPTIONAL:
+		/*
+		 *	If it didn't match, we return "no words for us".
+		 */
+		words = syntax_check(a->first, argc, argv, fail);
+		if (words < 0) return 0;
+		return words;
+
+	case CLI_TYPE_PLUS:
+		/*
+		 *	Has to match at least once.
+		 */
+		words = syntax_check(a->first, argc, argv, fail);
+		if (words <= 0) return words;
+
+		if (words > argc) return words;
+
+		argc -= words;
+		argv += words;
+		rcode = words;
+
+		while (argc > 0) {
+			words = syntax_check(a->first, argc, argv, fail);
+			if (words < 0) return words - rcode;
+
+			if (words == 0) break; /* didn't match anything */
+
+			if (words > argc) return words;
+
+			argc -= words;
+			argv += words;
+			rcode += words;
+		}
+		return rcode;
+
+	case CLI_TYPE_CONCAT:
+		/*
+		 *	Check first entry, which might not match
+		 *	anything if it's optional.
+		 */
+		words = syntax_check(a->first, argc, argv, fail);
+		if (words < 0) return words;
+
+		if (words > argc) return words;
+
+		argc -= words;
+		argv += words;
+		rcode = words;
+
+		words = syntax_check(a->next, argc, argv, fail);
+		if (words < 0) return words - rcode;
+
+		if (words > argc) return rcode + words;
+
+		argc -= words;
+		argv += words;
+		rcode += words;
+		return rcode;
+
+	case CLI_TYPE_ALTERNATE:
+		words = syntax_check(a->first, argc, argv, fail);
+		if (words < 0) return syntax_check(a->next, argc, argv, fail);
+
+		return words;
+
+	default:
+		break;
+
 	}
 
-	return 1;
+	return -1;
 }
 
 

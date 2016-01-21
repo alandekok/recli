@@ -239,6 +239,7 @@ static int do_help(char *buffer, size_t len)
 
 	if ((strcmp(buffer, "help") == 0) ||
 	    (strncmp(buffer, "help ", 5) == 0)) {
+		int rcode;
 		const char *help = NULL;
 		char const *fail = NULL;
 		cli_syntax_t *match;
@@ -246,12 +247,14 @@ static int do_help(char *buffer, size_t len)
 		my_argc = ctx2argv(buffer + 4, len - 4, 128, my_argv);
 		if (my_argc < 0) return -1;
 
-		if ((my_argc > 0) &&
-		    (syntax_check(config.syntax, my_argc, my_argv, &fail) < 0)) {
-			if (!fail) {
-				fprintf(stderr, "Invalid input\n");
-			} else {
-				fprintf(stderr, "Invalid input '%s'\n", fail);
+		if (my_argc > 0) {
+			rcode = syntax_check(config.syntax, my_argc, my_argv, &fail);
+			if (rcode < 0) {
+				if (!fail) {
+					fprintf(stderr, "Invalid input\n");
+				} else {
+					fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, fail);
+				}
 			}
 			return 1;
 		}
@@ -279,7 +282,7 @@ static int do_help(char *buffer, size_t len)
 }
 
 
-static const char *spaces = "                                                                                                                                                                                                                                                                ";
+//static const char *spaces = "                                                                                                                                                                                                                                                                ";
 
 int main(int argc, char **argv)
 {
@@ -490,45 +493,77 @@ int main(int argc, char **argv)
 
 			my_argc = ctx2argv(mybuf, mylen, 128, my_argv);
 			if (my_argc < 0) {
-				c = -1;
-				goto show_error;
+				goto show_error; /* FIXME: print out what couldn't be parsed */
 			}
 
+			/*
+			 *	FIXME: Cache the new syntax in the stack via syntax_match_max,
+			 *	which lets us avoid a lot of the argv mangling
+			 *	do the same for help, too.
+			 */
+
+#if 0
+			for (int i = 0; i < my_argc; i++) {
+				printf("\t%d\t%s\n", i, my_argv[i]);
+			}
+			printf("ARGC %d\n", my_argc);
+#endif
+
+			/*
+			 *	c < 0 - error in argument -C
+			 *	c == my_argc, parsed it completely
+			 *	c > my_argc, add new context
+			 */
 			c = syntax_check(config.syntax, my_argc, my_argv, &fail);
-			if ((c < 0) && (ctx_stack_ptr > 0)) {
-				int argc2;
-				char *argv2[128];
-				const char *fail2;
-				char buf2[4096];
 
-				memcpy(buf2, line, mylen + 1);
-				argc2 = str2argv(buf2, mylen, 128, argv2);
-				c = syntax_check(config.syntax, argc2, argv2,
-						 &fail2);
-				if (c <= 0) {
-					c = -1;
-					goto show_error;
-				}
-				memcpy(my_argv, argv2, sizeof(argv2[0]) * argc2);
-				my_argc = argc2;
-				c = 0;
-				goto show_error;
+//			printf("RETURN %d\n", c);
+
+			if (c < 0) {
+			show_error:
+				/*
+				 *	FIXME: check against my_argc
+				 *
+				 *	FIXME: check against stack
+				 *
+				 *	if we have "x y" on the stack
+				 *	and type in an erroneous "z",
+				 *	the c here will be -3, not -1.
+				 */
+				fprintf(stderr, ">>> %s\n", line);
+				fprintf(stderr, "Invalid input in argument %d\n", -c);
+
+				runit = 0;
+				goto add_line;
+			}
+
+			/*
+			 *	We reached the end of the syntax before the end of the input
+			 */
+			if (c < my_argc) {
+				fprintf(stderr, "Too much input! Expected %d words, got %d\n",
+					c, my_argc);
+				runit = 0;
+				goto add_line;
 			}
 
 
-			if ((c == 0) && !context) c = -1;
-			
-			if (c == 0) {
+			/*
+			 *	FIXME: figure out which thing we didn't have permission for.
+			 */
+			if (!permission_enforce(config.permissions, my_argc, my_argv)) {
+				fprintf(stderr, "%s\n", line);
+				fprintf(stderr, "^ - No permission\n");
+				runit = 0;
+				goto add_line;
+			}
+
+			/*
+			 *	Got N commands, wanted M > N in order to do anything.
+			 */
+			if (c > my_argc) {
 				if (ctx_stack_ptr == CTX_STACK_MAX) {
 					runit = 0;
 					c = -1;
-					goto add_line;
-				}
-
-				if (!permission_enforce(config.permissions, my_argc, my_argv)) {
-					fprintf(stderr, "%s\n", line);
-					fprintf(stderr, "^ - No permission\n");
-					runit = 0;
 					goto add_line;
 				}
 
@@ -555,43 +590,14 @@ int main(int argc, char **argv)
 				prompt = prompt_ctx;
 				goto next_line;
 			}
-			
+
+			if (c == my_argc) {
+				runit = 1;
+			}
+
 			/*
-			 *	We return the error based on
-			 *	what the user entered, not on
-			 *	what we synthesized from the
-			 *	context.
+			 *	Debugging: print out the input line
 			 */
-			if (ctx_stack_ptr) {
-				int i;
-
-				for (i = 0; i < ctx_stack_ptr; i++) {
-					fail += ctx_stack[i].len;
-				}
-			}
-			
-		show_error:			
-			if (c < 0) {
-				fprintf(stderr, "%s\n", line);
-				if (fail &&
-				    ((size_t) (fail - my_argv[0]) < sizeof(spaces))) {
-					fprintf(stderr, "%.*s^ - Invalid input\n",
-						(int) (fail - my_argv[0]), spaces);
-				} else {
-					fprintf(stderr, "^ - Invalid input\n");
-				}
-
-				runit = 0;
-				goto add_line;
-			}
-
-			if (!permission_enforce(config.permissions, my_argc, my_argv)) {
-				fprintf(stderr, "%s\n", line);
-				fprintf(stderr, "^ - No permission\n");
-				runit = 0;
-				goto add_line;
-			}
-
 			if (!config.dir) {
 				int i;
 
