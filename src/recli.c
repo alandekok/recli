@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <assert.h>
 #include "recli.h"
 
 static int in_string = 0;
@@ -21,6 +22,9 @@ static recli_config_t config = {
 	.permissions = NULL
 };
 
+static char *prompt_full = "";
+static char *prompt_ctx = "";
+static char *history_file = NULL;
 
 /*
  *	Admins can type a partial command, in which case it's put on
@@ -29,40 +33,35 @@ static recli_config_t config = {
  *	limit the size of the stack.
  */
 typedef struct ctx_stack_t {
-	size_t len;
-	char   buffer[256];
+	char		*prompt;
+
+	char		*buf;
+	size_t		len;
+	size_t		bufsize;
+
+	char		*argv_buf;
+	size_t		argv_bufsize;
+
+	int		argc;
+	char		**argv;
+
+	int		total_argc;
+	int		max_argc;
+
+	cli_syntax_t	*syntax;
+	cli_syntax_t	*help;
 } ctx_stack_t;
+
+
+static char ctx_line_buf[8192];	/* full line of whatever the user entered */
+static char ctx_argv_buf[8192];	/* copy of the above, split into argv */
+static char *ctx_argv[256];	/* where the argvs are */
 
 #define CTX_STACK_MAX (32)
 
-static char ctx_line_full[8192];
-static char *ctx_line_end = ctx_line_full;
-
-static int ctx_stack_ptr = 0;
-static ctx_stack_t ctx_stack[CTX_STACK_MAX];
-
-static char ctx_mybuf[8192];
-
-static int ctx2argv(char *buf, size_t len, int max_argc, char *argv[])
-{
-	int i;
-	char *p;
-
-	if (!ctx_stack_ptr) {
-		return str2argv(buf, len, max_argc, argv);
-	}	
-
-	p = ctx_mybuf;
-	for (i = 0; i < ctx_stack_ptr; i++) {
-		memcpy(p, ctx_stack[i].buffer, ctx_stack[i].len);
-		p += ctx_stack[i].len;
-	}
-
-	memcpy(p, buf, len + 1);
-	p += len;
-
-	return str2argv(ctx_mybuf, p - ctx_mybuf, max_argc, argv);
-}
+static int ctx_stack_index = 0;
+static ctx_stack_t ctx_stack_array[CTX_STACK_MAX];
+static ctx_stack_t *ctx_stack = NULL;
 
 extern pid_t child_pid;
 
@@ -95,25 +94,10 @@ void completion(const char *buf, linenoiseCompletions *lc)
 	int i, num;
 	char *tabs[256];
 	size_t offset = 0;
-	char buffer[1024];
 
 	if (in_string) return;
 
-	if (ctx_stack_ptr > 0) {
-		char *p = buffer;
-
-		for (i = 0; i < ctx_stack_ptr; i++) {
-			strlcpy(p, ctx_stack[i].buffer,
-				sizeof(buffer) - (p - buffer));
-			p += strlen(p);
-		}
-
-		strlcpy(p, buf, sizeof(buffer) - (p - buffer));
-		offset = p - buffer;
-		buf = buffer;
-	}
-	
-	num = syntax_tab_complete(config.syntax, buf, strlen(buf), 256, tabs);
+	num = syntax_tab_complete(ctx_stack->syntax, buf, strlen(buf), 256, tabs);
 	if (num == 0) return;
 	
 	for (i = 0; i < num; i++) {
@@ -168,137 +152,324 @@ int foundquote(const char *buf, size_t len, char c)
 /*
  *	Callback from linenoise when '?' is pressed.
  */
-static int foundhelp(const char *buf, size_t len, UNUSED char c)
+static int foundhelp(const char *line, size_t len, UNUSED char c)
 {
 	int argc;
 	char *argv[256];
-	cli_syntax_t *match, *suffix;
-	char mybuf[1024];
-	
+	char buffer[1024];
+
+	/*
+	 *	In a quoted string, don't do anything.
+	 */
 	if (in_string) return 0;
 
-	if (len == 0) {
-		printf("?\r\n");
-		if (ctx_stack_ptr == 0) {
-			syntax_print_lines(config.syntax);
-			return 1;
-		}
+	printf("?\r\n");
 
-		memcpy(mybuf, buf, len + 1);
-		argc = ctx2argv(mybuf, len, 256, argv);
-
-		match = syntax_match_max(config.syntax, argc, argv);
-		if (!match) return 1;
-
-		/*
-		 *	skip the prefix, or print it as something special?
-		 */
-		suffix = syntax_skip_prefix(match, argc);
-		if (!suffix) exit(1);
-
-		syntax_print_lines(suffix);
-		syntax_free(suffix);
-		syntax_free(match);
+	if ((len == 0) || !ctx_stack->help) {
+	do_print:
+		syntax_print_lines(ctx_stack->syntax);
 		return 1;
 	}
 	
-	memcpy(mybuf, buf, len + 1);
-	argc = ctx2argv(mybuf, len, 256, argv);
-	printf("?\r\n");
-	if (argc == 0) {
-		syntax_print_lines(config.syntax);
+	memcpy(buffer, line, len + 1);
+	argc = str2argv(buffer, len, 256, argv);
 
-	} else {
+	if (argc <= 0) goto do_print;
 
-		syntax_print_context_help(config.help, argc, argv);
-		syntax_print_context_help_subcommands(config.help, argc, argv);
-	}
-	
+	syntax_print_context_help(ctx_stack->help, argc, argv);
+	syntax_print_context_help_subcommands(ctx_stack->help, argc, argv);
+
 	return 1;
 }
 
-static int do_help(char *buffer, size_t len)
+static int do_help(int argc, char **argv)
 {
-	int my_argc;
-	char *my_argv[128];
+	int rcode;
+	char const *help;
+	char const *fail;
 
-	if (strcmp(buffer, "help syntax") == 0) {
-		cli_syntax_t *match;
-
-		my_argc = ctx2argv(buffer, len, 128, my_argv);
-		if (my_argc < 0) return -1;
-
-		match = syntax_match_max(config.syntax,
-					 my_argc, my_argv);
-		if (match) {
-			syntax_print_lines(match);
-			syntax_free(match);
-		}
+	/*
+	 *	Show the current syntax
+	 */
+	if ((argc >= 1) && (strcmp(argv[0], "syntax") == 0)) {
+		syntax_print_lines(ctx_stack->syntax);
 		return 1;
 	}
 
-	if ((strcmp(buffer, "help") == 0) ||
-	    (strncmp(buffer, "help ", 5) == 0)) {
-		int rcode;
-		const char *help = NULL;
-		char const *fail = NULL;
-		cli_syntax_t *match;
-
-		my_argc = ctx2argv(buffer + 4, len - 4, 128, my_argv);
-		if (my_argc < 0) return -1;
-
-		if (my_argc > 0) {
-			rcode = syntax_check(config.syntax, my_argc, my_argv, &fail);
-			if (rcode < 0) {
-				if (!fail) {
-					fprintf(stderr, "Invalid input\n");
-				} else {
-					fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, fail);
-				}
-			}
-			return 1;
-		}
-
-		/*
-		 *	Print short help text first
-		 */
-		match = syntax_match_max(config.syntax, my_argc, my_argv);
-		if (match) {
-			syntax_free(match);
-			syntax_print_context_help(config.help, my_argc, my_argv);
-		}
-
-		help = syntax_show_help(config.help,
-					my_argc, my_argv);
-		if (!help) {
-			printf("\r\n");
+	rcode = syntax_check(ctx_stack->syntax, argc, argv, &fail);
+	if (rcode < 0) {
+		if (!fail) {
+			fprintf(stderr, "Invalid input\n");
 		} else {
-			recli_fprintf_words(recli_stdout, "%s", help);
+			fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, fail);
 		}
-		return 1;
+
+		return 0;
 	}
 
-	return 0;		/* not help */
+	/*
+	 *	Print short help text first
+	 */
+	syntax_print_context_help(ctx_stack->help, argc, argv);
+
+	help = syntax_show_help(ctx_stack->help, argc, argv);
+	if (!help) {
+		recli_fprintf(recli_stdout, "\r\n");
+	} else {
+		recli_fprintf_words(recli_stdout, "%s", help);
+	}
+
+	return 1;
 }
 
 
-//static const char *spaces = "                                                                                                                                                                                                                                                                ";
+static void ctx_stack_pop(void)
+{
+	if (ctx_stack_index == 0) return;
+
+	assert(ctx_stack->syntax != NULL);
+	syntax_free(ctx_stack->syntax);
+	if (ctx_stack->help) syntax_free(ctx_stack->help);
+
+	ctx_stack_index--;
+	ctx_stack--;
+
+	/*
+	 *	Reset buffers, etc. for the previous context.
+	 */
+	ctx_stack->buf[0] = '\0';
+	ctx_stack->argv_buf[0] = '\0';
+	ctx_stack->argv[0] = NULL;
+
+	ctx_stack->max_argc += ctx_stack->argc;
+	ctx_stack->total_argc -= ctx_stack->argc;
+	ctx_stack->argc = 0;
+}
+
+/*
+ *	The user-entered string is already in ctx_stack->buf
+ */
+static void ctx_stack_push(int argc)
+{
+	size_t len;
+	ctx_stack_t *next;
+	cli_syntax_t *match;
+
+	if (ctx_stack_index >= (CTX_STACK_MAX - 1)) return;
+
+	next = ctx_stack + 1;
+
+	match = syntax_match_max(ctx_stack->syntax, argc, ctx_stack->argv);
+	assert(match != NULL);
+
+	next->syntax = syntax_skip_prefix(match, argc);
+	assert(next->syntax != NULL);
+	syntax_free(match);
+
+	if (ctx_stack->help) {
+		match = syntax_match_max(ctx_stack->help, argc, ctx_stack->argv);
+		if (match) {
+			next->help = syntax_skip_prefix(match, argc);
+			syntax_free(match);
+		} else {
+			next->help = NULL;
+		}
+	} else {
+		next->help = NULL;
+	}
+
+	len = strlen(ctx_stack->buf);
+
+	ctx_stack->buf[len++] = ' ';
+	ctx_stack->buf[len] = '\0';
+
+	ctx_stack->len = len;
+
+	next->buf = ctx_stack->buf + len;
+	next->bufsize = ctx_stack->bufsize - len;
+
+	next->argv_buf = &ctx_argv_buf[0] + (next->buf - &ctx_line_buf[0]);
+
+	next->argv_buf = ctx_stack->argv[argc - 1] + 1;
+	next->argv_bufsize = next->bufsize;
+
+	next->argv = ctx_stack->argv + argc;
+	next->argv[0] = NULL;
+
+	next->max_argc = ctx_stack->max_argc - argc;
+	next->argc = argc;
+	next->total_argc = ctx_stack->total_argc + argc;
+
+	next->prompt = prompt_ctx;
+
+	ctx_stack_index++;
+	ctx_stack = next;
+}
+
+static char const *spaces = "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ";
+
+static void process(int tty, char *line)
+{
+	int argc, c;
+	int runit = 1;
+	size_t len = strlen(line);
+	const char *fail;
+	char **argv;
+
+	if (!len) goto done;
+
+	if (len >= ctx_stack->bufsize) {
+		fprintf(stderr, "line too long\r\n");
+		goto done;
+	}
+
+	/*
+	 *	Copy the text to the two buffers.
+	 */
+	memcpy(ctx_stack->buf, line, len + 1);
+	memcpy(ctx_stack->argv_buf, line, len + 1);
+
+	argv = ctx_stack->argv;
+
+	argc = str2argv(ctx_stack->argv_buf, len, ctx_stack->max_argc, argv);
+	if (!argc) goto done;
+
+	if (argc < 0) {
+		fprintf(stderr, "%s\n", ctx_stack->buf);
+		fprintf(stderr, "%.*s^", -argc, spaces);
+		fprintf(stderr, " Parse error\n");
+		goto done;
+	}
+
+	if (strcmp(argv[0], "exit") == 0) {
+		if (ctx_stack_index == 0) {
+			exit(0);
+		}
+
+		ctx_stack_pop();
+		printf("%s\n", ctx_line_buf);
+		goto done;
+	}
+
+	if (strcmp(argv[0], "end") == 0) {
+		while (ctx_stack_index > 0) ctx_stack_pop();
+		goto done;
+	}
+
+	if ((strcmp(argv[0], "quit") == 0) ||
+	    (strcmp(argv[0], "logout") == 0)) {
+		exit(0);
+	}
+
+	if (strcmp(argv[0], "help") == 0) {
+		do_help(argc - 1, argv + 1);
+		goto done;
+	}
+
+	/*
+	 *	c < 0 - error in argument -C
+	 *	c == argc, parsed it completely
+	 *	c > argc, add new context
+	 */
+	c = syntax_check(ctx_stack->syntax, argc, argv, &fail);
+	if (c < 0) {
+		/*
+		 *	FIXME: check against argc
+		 *
+		 *	FIXME: check against stack
+		 *
+		 *	if we have "x y" on the stack
+		 *	and type in an erroneous "z",
+		 *	the c here will be -3, not -1.
+		 */
+		fprintf(stderr, "%s\n", ctx_stack->buf);
+		if (-c == argc) {
+			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[argc - 1] - ctx_stack->argv_buf), spaces);
+
+		} else {
+			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c] - ctx_stack->argv_buf), spaces);
+		}
+		fprintf(stderr, " Parse error\n");
+		
+		runit = 0;
+		goto add_line;
+	}
+
+	/*
+	 *	We reached the end of the syntax before the end of the input
+	 */
+	if (c < argc) {
+		fprintf(stderr, "Too much input! Expected %d words, got %d\n",
+			c, argc);
+		runit = 0;
+		goto add_line;
+	}
+
+	/*
+	 *	FIXME: figure out which thing we didn't have permission for.
+	 *
+	 *	Note that we check the permissions on the FULL arguments, because that's how it works.q
+	 */
+	if (!permission_enforce(config.permissions, ctx_stack->total_argc + argc,
+				ctx_argv)) {
+		fprintf(stderr, "%s\n", line);
+		fprintf(stderr, "^ - No permission\n");
+		runit = 0;
+		goto add_line;
+	}
+
+	/*
+	 *	Got N commands, wanted M > N in order to do anything.
+	 */
+	if (c > argc) {
+		runit = 0;
+
+		if (ctx_stack_index >= (CTX_STACK_MAX - 1)) {
+			c = -1;
+			goto add_line;
+		}
+
+		ctx_stack_push(argc);
+		goto done;
+	}
+
+	runit = 1;
+
+add_line:
+	if (tty) {
+		/*
+		 *	Save the FULL text in the history.
+		 */
+		linenoiseHistoryAdd(ctx_line_buf);
+		linenoiseHistorySave(history_file); /* Save every new entry */
+	}
+
+	if (runit && config.dir) {
+		char buffer[8192];
+
+		snprintf(buffer, sizeof(buffer), "%s/bin/",
+			 config.dir);
+		
+		recli_exec(buffer, ctx_stack->total_argc + argc,
+			   ctx_argv, config.envp);
+		recli_load_syntax(&config);
+		fflush(stdout);
+		fflush(stderr);
+	}
+
+done:
+	free(line);
+}
+
 
 int main(int argc, char **argv)
 {
-	int c, rcode, my_argc;
-	const char *prompt = config.prompt;
-	char *prompt_full = "";
-	char *prompt_ctx = "";
+	int c, rcode;
 	char const *progname;
-	char *history_file = NULL;
 	int quit = 0;
-	int context = 1;
 	char *line;
-	char *my_argv[128];
 	int tty = 1;
 	int debug_syntax = 0;
-	char mybuf[1024];
 
 #ifndef NO_COMPLETION
 	linenoiseSetCompletionCallback(completion);
@@ -338,7 +509,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'P':
-			config.prompt = prompt = optarg;
+			config.prompt = optarg;
 			break;
 		    
 		case 'X':
@@ -356,8 +527,7 @@ int main(int argc, char **argv)
 	argv += (optind - 1);
 
 	if (!isatty(STDIN_FILENO)) {
-		config.prompt = prompt = "";
-		context = 0;
+		config.prompt = "";
 		tty = 0;
 	}
 
@@ -372,8 +542,6 @@ int main(int argc, char **argv)
 
 		prompt_ctx = malloc(256);
 		snprintf(prompt_ctx, 256, "%s ...> ", config.prompt);
-
-		prompt = prompt_full;
 	}
 
 	/*
@@ -426,217 +594,35 @@ int main(int argc, char **argv)
 	set_signal(SIGINT, catch_sigquit);
 	set_signal(SIGQUIT, catch_sigquit);
 
-	while((line = linenoise(prompt)) != NULL) {
-		int runit = 1;
-		const char *fail;
+	/*
+	 *	Set up the stack.
+	 */
+	ctx_stack_index = 0;
+	ctx_stack = &ctx_stack_array[0];
 
-		if (line[0] != '\0') {
-			size_t mylen = strlen(line);
+	ctx_stack->argv = ctx_argv;
+	ctx_stack->argc = 0;
+	ctx_stack->total_argc = 0;
+	ctx_stack->max_argc = sizeof(ctx_argv) / sizeof(ctx_argv[0]);
+	
+	ctx_stack->buf = ctx_line_buf;
+	ctx_stack->bufsize = sizeof(ctx_line_buf);
 
-			if (context)  {
-				if (strcmp(line, "exit") == 0) {
-					if (ctx_stack_ptr == 0) {
-						exit(0);
-					}
+	ctx_stack->argv_buf = ctx_argv_buf;
+	ctx_stack->argv_bufsize = sizeof(ctx_argv_buf);
 
-					ctx_stack_ptr--;
-					if (ctx_stack_ptr == 0) {
-						prompt = prompt_full;
-						ctx_line_end = ctx_line_full;
-					} else {
-						int i;
-						char *p;
+	ctx_stack->syntax = config.syntax;
+	ctx_stack->help = config.help;
 
-						p = ctx_line_full;
-						for (i = 0; i < ctx_stack_ptr; i++) {
-							memcpy(p, ctx_stack[i].buffer, ctx_stack[i].len);
-							p += ctx_stack[i].len;
-						}
-						ctx_line_end = p;
-					}
-					goto next_line;
-				}
+	ctx_stack->prompt = prompt_full;
 
-				if (strcmp(line, "end") == 0) {
-					ctx_stack_ptr = 0;
-					ctx_line_end = ctx_line_full;
-					prompt = prompt_full;
-					goto next_line;
-				}
-
-				if ((strcmp(line, "quit") == 0) ||
-				    (strcmp(line, "logout") == 0)) {
-					exit(0);
-				}
-			}
-
-			if (mylen >= sizeof(mybuf)) {
-				fprintf(stderr, "line too long\r\n");
-				goto next_line;
-			}
-
-			memcpy(mybuf, line, mylen + 1);
-
-			/*
-			 *	Look for "help" BEFORE splitting the
-			 *	line.  This is so that we can do help
-			 *	when the user has a context.
-			 */
-			if (config.help) {
-				c = do_help(mybuf, mylen);
-				if (c < 0) goto show_error;
-				if (c == 1) {
-					runit = 0;
-					goto add_line;
-				}
-			}
-
-			my_argc = ctx2argv(mybuf, mylen, 128, my_argv);
-			if (my_argc < 0) {
-				goto show_error; /* FIXME: print out what couldn't be parsed */
-			}
-
-			/*
-			 *	FIXME: Cache the new syntax in the stack via syntax_match_max,
-			 *	which lets us avoid a lot of the argv mangling
-			 *	do the same for help, too.
-			 */
-
-#if 0
-			for (int i = 0; i < my_argc; i++) {
-				printf("\t%d\t%s\n", i, my_argv[i]);
-			}
-			printf("ARGC %d\n", my_argc);
-#endif
-
-			/*
-			 *	c < 0 - error in argument -C
-			 *	c == my_argc, parsed it completely
-			 *	c > my_argc, add new context
-			 */
-			c = syntax_check(config.syntax, my_argc, my_argv, &fail);
-
-//			printf("RETURN %d\n", c);
-
-			if (c < 0) {
-			show_error:
-				/*
-				 *	FIXME: check against my_argc
-				 *
-				 *	FIXME: check against stack
-				 *
-				 *	if we have "x y" on the stack
-				 *	and type in an erroneous "z",
-				 *	the c here will be -3, not -1.
-				 */
-				fprintf(stderr, ">>> %s\n", line);
-				fprintf(stderr, "Invalid input in argument %d\n", -c);
-
-				runit = 0;
-				goto add_line;
-			}
-
-			/*
-			 *	We reached the end of the syntax before the end of the input
-			 */
-			if (c < my_argc) {
-				fprintf(stderr, "Too much input! Expected %d words, got %d\n",
-					c, my_argc);
-				runit = 0;
-				goto add_line;
-			}
-
-
-			/*
-			 *	FIXME: figure out which thing we didn't have permission for.
-			 */
-			if (!permission_enforce(config.permissions, my_argc, my_argv)) {
-				fprintf(stderr, "%s\n", line);
-				fprintf(stderr, "^ - No permission\n");
-				runit = 0;
-				goto add_line;
-			}
-
-			/*
-			 *	Got N commands, wanted M > N in order to do anything.
-			 */
-			if (c > my_argc) {
-				if (ctx_stack_ptr == CTX_STACK_MAX) {
-					runit = 0;
-					c = -1;
-					goto add_line;
-				}
-
-				ctx_stack[ctx_stack_ptr].len = strlen(line);
-				if (ctx_stack[ctx_stack_ptr].len + 2 >=
-				    sizeof(ctx_stack[ctx_stack_ptr].buffer)) {
-					runit = 0;
-					c = -1;
-					goto add_line;
-				}
-
-				memcpy(ctx_stack[ctx_stack_ptr].buffer, line,
-				       ctx_stack[ctx_stack_ptr].len);
-
-				memcpy(ctx_stack[ctx_stack_ptr].buffer + 
-				       ctx_stack[ctx_stack_ptr].len, " ", 2);
-				ctx_stack[ctx_stack_ptr].len++;
-
-				memcpy(ctx_line_end, line, ctx_stack[ctx_stack_ptr].len);
-				ctx_line_end += ctx_stack[ctx_stack_ptr].len;
-
-				ctx_stack_ptr++;
-
-				prompt = prompt_ctx;
-				goto next_line;
-			}
-
-			if (c == my_argc) {
-				runit = 1;
-			}
-
-			/*
-			 *	Debugging: print out the input line
-			 */
-			if (!config.dir) {
-				int i;
-
-				for (i = 0; i < ctx_stack_ptr; i++) {
-					printf("%s", ctx_stack[i].buffer);
-				}
-				printf("%s\n", line);
-			}
-
-		add_line:
-			if (tty) {
-				/*
-				 *	Save the FULL text in the history.
-				 */
-				strcpy(ctx_line_end, line);
-
-				linenoiseHistoryAdd(ctx_line_full);
-
-				linenoiseHistorySave(history_file); /* Save every new entry */
-			}
-
-			if (runit && config.dir) {
-				char buffer[8192];
-
-				snprintf(buffer, sizeof(buffer), "%s/bin/",
-					 config.dir);
-
-				recli_exec(buffer, my_argc, my_argv,
-					   config.envp);
-				recli_load_syntax(&config);
-				fflush(stdout);
-				fflush(stderr);
-			}
-		}
-	next_line:
-		free(line);
+	while ((line = linenoise(ctx_stack->prompt)) != NULL) {
+		process(tty, line);
 	}
 
 done:
+	while (ctx_stack_index > 0) ctx_stack_pop();
+
 	if (config.help) syntax_free(config.help);
 	syntax_free(config.syntax);
 	permission_free(config.permissions);

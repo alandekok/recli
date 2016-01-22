@@ -58,10 +58,10 @@ int str2argv(char *buf, size_t len, int max_argc, char *argv[])
 			ssize_t quote;
 
 			quote = strquotelen(p);
-			if (quote < 0) return -1;
+			if (quote < 0) return -(p - buf);
 
 			if (p[quote] && !isspace((int) p[quote])) {
-				return -1;
+				return -(p + quote - buf);
 			}
 
 			if (argv) {
@@ -91,11 +91,11 @@ int str2argv(char *buf, size_t len, int max_argc, char *argv[])
 
 		if (!*p) return argc;
 
-		if (!isspace((int) *p)) return -1;
+		if (!isspace((int) *p)) return -(p - buf);
 
 	}
 
-	return -1;
+	return -(p - buf);
 }
 
 void print_argv(int argc, char *argv[])
