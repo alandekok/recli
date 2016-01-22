@@ -386,6 +386,9 @@ static void process(int tty, char *line)
 		if (-c == argc) {
 			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[argc - 1] - ctx_stack->argv_buf), spaces);
 
+		} else if (-c > argc) {
+			fprintf(stderr, "%.*s^", (int) strlen(ctx_stack->buf), spaces);
+
 		} else {
 			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c] - ctx_stack->argv_buf), spaces);
 		}
