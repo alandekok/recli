@@ -188,7 +188,7 @@ static int do_help(int argc, char **argv)
 {
 	int rcode;
 	char const *help;
-	char const *fail;
+	char const *error;
 
 	/*
 	 *	Show the current syntax
@@ -198,12 +198,12 @@ static int do_help(int argc, char **argv)
 		return 1;
 	}
 
-	rcode = syntax_check(ctx_stack->syntax, argc, argv, &fail);
+	rcode = syntax_check(ctx_stack->syntax, argc, argv, &error);
 	if (rcode < 0) {
-		if (!fail) {
+		if (!error) {
 			fprintf(stderr, "Invalid input\n");
 		} else {
-			fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, fail);
+			fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, error);
 		}
 
 		return 0;
@@ -315,7 +315,7 @@ static void process(int tty, char *line)
 	int argc, c;
 	int runit = 1;
 	size_t len = strlen(line);
-	const char *fail;
+	const char *error;
 	char **argv;
 
 	if (!len) goto done;
@@ -378,7 +378,7 @@ static void process(int tty, char *line)
 	 *	c == argc, parsed it completely
 	 *	c > argc, add new context
 	 */
-	c = syntax_check(ctx_stack->syntax, argc, argv, &fail);
+	c = syntax_check(ctx_stack->syntax, argc, argv, &error);
 
 	if (c < 0) {
 		/*

@@ -2285,10 +2285,12 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
  *	i.e. argc == 0, but we still have nodes to match.
  */
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
-		 const char **fail)
+		 const char **error)
 {
 	int words, rcode;
 	cli_syntax_t *a;
+
+	*error = NULL;
 
 	if (!head || (argc < 0)) return -1;
 
@@ -2303,11 +2305,15 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 				return 1;
 			}
 
+			/*
+			 *	FIXME: have the parser take an error, too!
+			 */
+
 		} else if (strcmp((char *)a->first, argv[0]) == 0) {
 			return 1;
 		}
 
-		*fail = argv[0];
+		*error = "No matching command";
 		return -1;	/* didn't match */
 
 	case CLI_TYPE_VARARGS:
@@ -2321,7 +2327,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		/*
 		 *	If it didn't match, we return "no words for us".
 		 */
-		words = syntax_check(a->first, argc, argv, fail);
+		words = syntax_check(a->first, argc, argv, error);
 		if (words < 0) return 0;
 		return words;
 
@@ -2329,7 +2335,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		/*
 		 *	Has to match at least once.
 		 */
-		words = syntax_check(a->first, argc, argv, fail);
+		words = syntax_check(a->first, argc, argv, error);
 		if (words <= 0) return words;
 
 		if (words > argc) return words;
@@ -2339,7 +2345,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		rcode = words;
 
 		while (argc > 0) {
-			words = syntax_check(a->first, argc, argv, fail);
+			words = syntax_check(a->first, argc, argv, error);
 			if (words < 0) return words - rcode;
 
 			if (words == 0) break; /* didn't match anything */
@@ -2357,7 +2363,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 *	Check first entry, which might not match
 		 *	anything if it's optional.
 		 */
-		words = syntax_check(a->first, argc, argv, fail);
+		words = syntax_check(a->first, argc, argv, error);
 		if (words < 0) return words;
 
 		if (words > argc) return words;
@@ -2366,7 +2372,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		argv += words;
 		rcode = words;
 
-		words = syntax_check(a->next, argc, argv, fail);
+		words = syntax_check(a->next, argc, argv, error);
 		if (words < 0) return words - rcode;
 
 		if (words > argc) return rcode + words;
@@ -2377,8 +2383,8 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		return rcode;
 
 	case CLI_TYPE_ALTERNATE:
-		words = syntax_check(a->first, argc, argv, fail);
-		if (words < 0) return syntax_check(a->next, argc, argv, fail);
+		words = syntax_check(a->first, argc, argv, error);
+		if (words < 0) return syntax_check(a->next, argc, argv, error);
 
 		return words;
 
@@ -2387,6 +2393,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	}
 
+	*error = "Internal sanity check failed";
 	return -1;
 }
 
