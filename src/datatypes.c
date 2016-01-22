@@ -50,6 +50,26 @@ static int parse_ipaddr(const char *buffer)
 	return 1;
 }
 
+static int parse_ipprefix(const char *buffer)
+{
+	char c;
+	int num, parts[5];
+
+	num = sscanf(buffer, "%d.%d.%d.%d/%d%c", &parts[0], &parts[1],
+		     &parts[2], &parts[3], &parts[4], &c);
+	if (num != 5) {
+		return 0;
+	}
+	for (num = 0; num < 4; num++) {
+		if (parts[num] < 0) return 0;
+		if (parts[num] > 255) return 0;
+	}
+	
+	if ((parts[4] < 0) || (parts[4] > 32)) return 0;
+
+	return 1;
+}
+
 /*
  *	This is broken.
  */
@@ -125,6 +145,7 @@ recli_datatype_t recli_datatypes[] = {
 	{ "BOOLEAN", parse_boolean },
 	{ "INTEGER", parse_integer },
 	{ "IPADDR", parse_ipaddr },
+	{ "IPPREFIX", parse_ipprefix },
 	{ "IPV6ADDR", parse_ipv6addr },
 	{ "MACADDR", parse_macaddr },
 	{ "STRING", parse_string },
