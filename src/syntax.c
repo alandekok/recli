@@ -1203,8 +1203,12 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		type = CLI_TYPE_EXACT; /* bypass the keyword checks below */
 		break;
 
-	case CLI_TYPE_EXACT:
 	case CLI_TYPE_VARARGS:
+		if (strcmp((char *) first, "...") != 0) return 0;
+		assert(next == NULL);
+		break;
+
+	case CLI_TYPE_EXACT:
 		assert(next == NULL);
 
 	case CLI_TYPE_MACRO:
@@ -1218,17 +1222,22 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 			p = (char *) first;
 			if (!*p) return 0; /* can't create empty strings */
 
+			/*
+			 *	Names must begin with a letter.
+			 */
+			if (!isalpha((int) *p)) return 0;
+
 			lowercase = 0;
 			uppercase = 0;
 
 			while (*p) {
 				if (*p < ' ') return 0; /* can't create binary names */
 
-				if ((*p >= 'a') && (*p <= 'z')) {
+				if (islower((int) *p)) {
 					lowercase = 1;
 				}
 
-				if ((*p >= 'A') && (*p <= 'Z')) {
+				if (isupper((int) *p)) {
 					uppercase = 1;
 				}
 
@@ -1241,7 +1250,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 				if (type == CLI_TYPE_EXACT) return 0; /* keywords must be lowercase */
 
 			} else {
-				if (!lowercase && (type != CLI_TYPE_VARARGS)) return 0; /* must have some letters in it */
+				if (!lowercase) return 0; /* must have some letters in it */
 
 				if (type == CLI_TYPE_MACRO) return 0; /* macros must be uppercase */
 			}
