@@ -1,10 +1,8 @@
-ip 1.2.3.4
-ip 0.1.2.3
 ip -3.3
-   ^ - Invalid input
+   ^ Parse error.
 ip xyz
-   ^ - Invalid input
+   ^ Parse error.
 ip 333.0.1.2
-   ^ - Invalid input
+   ^ Parse error.
 ip 1.2.3.3a
-   ^ - Invalid input
+   ^ Parse error.

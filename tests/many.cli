@@ -1,13 +1,13 @@
 have a good day
 have a bad day
-have					# SYNTAX ERROR
+#have					# SYNTAX ERROR
 have good day
 have bad day
 maybe he is a good person
 maybe she is a bad person
 maybe he is mediocre person
 how do many people do something
-how do we do
+#how do we do
 how do we do something
 how do many people do
 how do some people do something

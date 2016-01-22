@@ -18,6 +18,7 @@ then
   if [ "$?" != "0" ]
   then
      echo "FAILED syntax parser: $1"
+     echo "../src/recli -s $SYNTAX -qX syntax > $1.tmp"
      echo $1 >> .failed
      exit 1
   fi
@@ -25,6 +26,7 @@ then
   if [ "$?" != "0" ]
   then
      echo "FAILED syntax normal form: $1"
+     echo "diff -w $1.norm $1.tmp 2>&1 > $DIFF"
      echo $1 >> .failed
      exit 1
   fi    
@@ -43,6 +45,8 @@ then
     rm -f $OUTPUT $DIFF
 else
     echo "FAILED output diff: $1"
+    echo "../src/recli -s $SYNTAX $PERM < $INPUT"
+    echo "diff $OUTPUT $EXPECTED 2>&1 > $DIFF"
     echo $1 >> .failed
     exit 1
 fi

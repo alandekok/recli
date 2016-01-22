@@ -1,9 +1,6 @@
-str "foo bar baz"
-str foo
 str "foo
-^ - Invalid input
+    ^ Parse error.
 str foo"
-^ - Invalid input
-str "foo \" bar"
+       ^ Parse error.
 str foo bar
-^ - Invalid input
+        ^ Unexpected text.

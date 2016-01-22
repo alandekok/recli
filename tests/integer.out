@@ -1,10 +1,6 @@
-int 1
-int -1
 int -2.3
-    ^ - Invalid input
+    ^ Parse error.
 int 0x44
-    ^ - Invalid input
-int 0334
+    ^ Parse error.
 int "hello"
-    ^ - Invalid input
-int 484747
+    ^ Parse error.
