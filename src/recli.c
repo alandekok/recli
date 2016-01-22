@@ -337,10 +337,15 @@ static void process(int tty, char *line)
 	if (argc < 0) {
 		fprintf(stderr, "%s\n", ctx_stack->buf);
 		fprintf(stderr, "%.*s^", -argc, spaces);
-		fprintf(stderr, " Parse error\n");
+		fprintf(stderr, " Parse error.\n");
 		goto done;
 	}
 
+	/*
+	 *	The built-in commands don't bother checking for too
+	 *	much input.  They also take priority over user
+	 *	commands.
+	 */
 	if (strcmp(argv[0], "exit") == 0) {
 		if (ctx_stack_index == 0) {
 			exit(0);
@@ -372,6 +377,7 @@ static void process(int tty, char *line)
 	 *	c > argc, add new context
 	 */
 	c = syntax_check(ctx_stack->syntax, argc, argv, &fail);
+
 	if (c < 0) {
 		/*
 		 *	FIXME: check against argc
@@ -392,7 +398,7 @@ static void process(int tty, char *line)
 		} else {
 			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c] - ctx_stack->argv_buf), spaces);
 		}
-		fprintf(stderr, " Parse error\n");
+		fprintf(stderr, " Parse error.\n");
 		
 		runit = 0;
 		goto add_line;
@@ -402,8 +408,10 @@ static void process(int tty, char *line)
 	 *	We reached the end of the syntax before the end of the input
 	 */
 	if (c < argc) {
-		fprintf(stderr, "Too much input! Expected %d words, got %d\n",
-			c, argc);
+		fprintf(stderr, "%s\n", ctx_stack->buf);
+		fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[c] - ctx_stack->argv_buf), spaces);
+
+		fprintf(stderr, " Unexpected text.\n");
 		runit = 0;
 		goto add_line;
 	}
