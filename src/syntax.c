@@ -1530,10 +1530,18 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 #endif
 
 	p = *buffer;
-	assert(*p != '\0');
+
+	if (!*p) return 0;
+
 	this = first = NULL;
 
 	while (*p) {
+		if (*p < ' ') {
+			syntax_error(p, "Cannot parse binary data");
+			syntax_free(first);
+			return 0;
+		}
+
 		if (isspace((int) *p)) p++;
 
 		if ((*p == ';') || (*p == '#')) break;
