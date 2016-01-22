@@ -1578,6 +1578,8 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 
 		start = p;
 
+		if (!*p) break;
+
 		if (*p < ' ') {
 			syntax_error(start, "Cannot parse binary data");
 			syntax_free(first);
