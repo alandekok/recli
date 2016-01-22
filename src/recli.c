@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <pwd.h>
 #include "recli.h"
 
 static int in_string = 0;
@@ -452,7 +454,8 @@ add_line:
 		 *	Save the FULL text in the history.
 		 */
 		linenoiseHistoryAdd(ctx_line_buf);
-		linenoiseHistorySave(history_file); /* Save every new entry */
+
+		if (history_file) linenoiseHistorySave(history_file);
 	}
 
 	if (runit && config.dir) {
@@ -566,15 +569,27 @@ int main(int argc, char **argv)
 	}
 
 	if (tty) {
-		/*
-		 *	TODO: configurably load the history.
-		 *	TODO: limit the size of the history.
-		 *	TODO: rename it to ~/.recli_history?
-		 */
-		history_file = malloc(2048);
-		snprintf(history_file, 2048, "%s_history.txt", progname);
+		 char *home;
 
-		linenoiseHistoryLoad(history_file); /* Load the history at startup */
+		 home = getenv("HOME");
+		 if (!home) home = getpwuid(getuid())->pw_dir;
+
+		 printf("HOME DIR %s\n", home);
+
+		if (home) {
+			history_file = malloc(8192);
+
+			snprintf(history_file, 8192, "%s/.recli", home);
+			if ((mkdir(history_file, 0700) < 0) &&
+			    (errno != EEXIST)) {
+				free(history_file);
+				history_file = NULL;
+			}
+
+			snprintf(history_file, 8192, "%s/.recli/%s_history.txt", home, progname);
+
+			linenoiseHistoryLoad(history_file); /* Load the history at startup */
+		}
 	}
 
 	linenoiseSetCharacterCallback(foundspace, ' ');
