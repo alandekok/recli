@@ -1536,17 +1536,17 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 	this = first = NULL;
 
 	while (*p) {
-		if (*p < ' ') {
-			syntax_error(p, "Cannot parse binary data");
-			syntax_free(first);
-			return 0;
-		}
-
 		if (isspace((int) *p)) p++;
 
 		if ((*p == ';') || (*p == '#')) break;
 
 		start = p;
+
+		if (*p < ' ') {
+			syntax_error(start, "Cannot parse binary data");
+			syntax_free(first);
+			return 0;
+		}
 
 		if (*p == '|') {
 			if (type == CLI_TYPE_ALTERNATE) break;
