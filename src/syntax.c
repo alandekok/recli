@@ -1179,7 +1179,7 @@ static void syntax_debug_printf(cli_type_t type, const char *msg,
 #endif
 
 /*
- *	Allocate a new node.  Ignoring normal form.
+ *	Allocate a new node.
  */
 static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 {
@@ -1203,7 +1203,43 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 
 	case CLI_TYPE_MACRO:
 		assert(first != NULL);
-		assert(strlen((char *)first) > 0);
+
+		{
+			int lowercase, uppercase;
+			char *p;
+
+
+			p = (char *) first;
+			if (!*p) return 0; /* can't create empty strings */
+
+			lowercase = 0;
+			uppercase = 0;
+
+			while (*p) {
+				if (*p <= ' ') return 0; /* can't create binary names */
+
+				if ((*p >= 'a') && (*p <= 'z')) {
+					lowercase = 1;
+				}
+
+				if ((*p >= 'A') && (*p <= 'Z')) {
+					uppercase = 1;
+				}
+
+				p++;
+			}
+
+			if (uppercase) {
+				if (lowercase) return 0; /* mixed case is not allowed */
+
+				if (type == CLI_TYPE_EXACT) return 0; /* keywords must be lowercase */
+
+			} else {
+				if (!lowercase && (type != CLI_TYPE_VARARGS)) return 0; /* must have some letters in it */
+
+				if (type == CLI_TYPE_MACRO) return 0; /* macros must be uppercase */
+			}
+		}
 		break;
 
 	case CLI_TYPE_KEY:
@@ -1881,13 +1917,18 @@ int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
 	find.first = (void *) name;
 	find.next = NULL;
 	this = syntax_find(&find);
-	if (this) return 1;
+	if (this) {
+		if (this->next != callback) return 0;
+
+		return 1;
+	}
 
 	len = strlen(name);
 
 	/*
-	 *	Do this manually so that we can set the callback.
-	 *	_new() expects "next" to be NULL.
+	 *	Do this manually so that we can set the callback,
+	 *	and bypass the restrictions in syntax_alloc() that
+	 *	the name can't be all uppercase.
 	 */
 	this = calloc(sizeof(*this) + len + 1, 1);
 	if (!this) return 0;
