@@ -167,7 +167,7 @@ static int foundhelp(const char *line, size_t len, UNUSED char c)
 
 	printf("?\r\n");
 
-	if ((len == 0) || !ctx_stack->help) {
+	if (!ctx_stack->help) {
 	do_print:
 		syntax_print_lines(ctx_stack->syntax);
 		return 1;
@@ -176,7 +176,7 @@ static int foundhelp(const char *line, size_t len, UNUSED char c)
 	memcpy(buffer, line, len + 1);
 	argc = str2argv(buffer, len, 256, argv);
 
-	if (argc <= 0) goto do_print;
+	if (argc < 0) goto do_print;
 
 	syntax_print_context_help(ctx_stack->help, argc, argv);
 	syntax_print_context_help_subcommands(ctx_stack->help, argc, argv);
