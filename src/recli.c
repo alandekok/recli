@@ -574,22 +574,20 @@ int main(int argc, char **argv)
 		 home = getenv("HOME");
 		 if (!home) home = getpwuid(getuid())->pw_dir;
 
-		 printf("HOME DIR %s\n", home);
+		 if (home) {
+			 history_file = malloc(8192);
 
-		if (home) {
-			history_file = malloc(8192);
+			 snprintf(history_file, 8192, "%s/.recli", home);
+			 if ((mkdir(history_file, 0700) < 0) &&
+			     (errno != EEXIST)) {
+				 free(history_file);
+				 history_file = NULL;
+			 }
 
-			snprintf(history_file, 8192, "%s/.recli", home);
-			if ((mkdir(history_file, 0700) < 0) &&
-			    (errno != EEXIST)) {
-				free(history_file);
-				history_file = NULL;
-			}
+			 snprintf(history_file, 8192, "%s/.recli/%s_history.txt", home, progname);
 
-			snprintf(history_file, 8192, "%s/.recli/%s_history.txt", home, progname);
-
-			linenoiseHistoryLoad(history_file); /* Load the history at startup */
-		}
+			 linenoiseHistoryLoad(history_file); /* Load the history at startup */
+		 }
 	}
 
 	linenoiseSetCharacterCallback(foundspace, ' ');
