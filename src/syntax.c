@@ -51,7 +51,8 @@ typedef enum cli_type_t {
 	CLI_TYPE_CONCAT,
 	CLI_TYPE_ALTERNATE,
 	CLI_TYPE_MACRO,
-	CLI_TYPE_PLUS
+	CLI_TYPE_PLUS,
+	CLI_TYPE_HELP		/* fake node */
 } cli_type_t;
 
 /*
@@ -1197,6 +1198,11 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		assert(0 == 1);
 		return NULL;
 
+	case CLI_TYPE_HELP:
+		assert(next == NULL);
+		type = CLI_TYPE_EXACT; /* bypass the keyword checks below */
+		break;
+
 	case CLI_TYPE_EXACT:
 	case CLI_TYPE_VARARGS:
 		assert(next == NULL);
@@ -1216,7 +1222,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 			uppercase = 0;
 
 			while (*p) {
-				if (*p <= ' ') return 0; /* can't create binary names */
+				if (*p < ' ') return 0; /* can't create binary names */
 
 				if ((*p >= 'a') && (*p <= 'z')) {
 					lowercase = 1;
@@ -2719,7 +2725,7 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 {
 	cli_syntax_t *this;
 
-	this = syntax_alloc(CLI_TYPE_EXACT, (void *) help, NULL);
+	this = syntax_alloc(CLI_TYPE_HELP, (void *) help, NULL);
 	assert(this != NULL);
 	this->length = flag; /* internal flag... */
 
