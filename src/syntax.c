@@ -245,13 +245,6 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 		return +1;
 	}
 
-	if ((a->type == CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
-		order = syntax_order(a->first, b->first);
-		if (order != 0) return order;
-
-		return syntax_order(a->next, b->next);
-	}
-
 	if ((a->type != CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
 		order = syntax_order(a, b->first);
 		if (order != 0) return order;
@@ -266,8 +259,19 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 		return +1;		/* a > b */
 	}
 
+	if ((a->type == CLI_TYPE_CONCAT) && (b->type == CLI_TYPE_CONCAT)) {
+		order = syntax_order(a->first, b->first);
+		if (order != 0) return order;
+
+		return syntax_order(a->next, b->next);
+	}
+
 	assert(a->type != CLI_TYPE_CONCAT);
 	assert(b->type != CLI_TYPE_CONCAT);
+
+	if ((a->type == CLI_TYPE_OPTIONAL) && (b->type == CLI_TYPE_OPTIONAL)) {
+		return syntax_order(a->first, b->first);
+	}
 
 	if (a->type == CLI_TYPE_OPTIONAL) {
 		order = syntax_order(a->first, b);
@@ -283,12 +287,20 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 		return -1;	/* a > b */
 	}
 
-	/*
-	 *	Simple things come before alternation.
-	 */
-	if ((a->type == CLI_TYPE_EXACT) && (b->type == CLI_TYPE_ALTERNATE)) return -1;
+	if ((a->type == CLI_TYPE_ALTERNATE) && (b->type != CLI_TYPE_ALTERNATE)) {
+		return +1;
+	}
 
-	if ((a->type == CLI_TYPE_ALTERNATE) && (b->type == CLI_TYPE_EXACT)) return +1;
+	if ((a->type != CLI_TYPE_ALTERNATE) && (b->type == CLI_TYPE_ALTERNATE)) {
+		return -1;
+	}
+
+	if ((a->type == CLI_TYPE_ALTERNATE) && (b->type == CLI_TYPE_ALTERNATE)) {
+		order = syntax_order(a->first, b->first);
+		if (order != 0) return order;
+
+		return syntax_order(a->next, b->next);
+	}
 
 	/*
 	 *	We've got to pick some order, so pick a stupid one.
