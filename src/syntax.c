@@ -2548,8 +2548,7 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 
 	memcpy(mybuf, in, len + 1);
 	argc = str2argv(mybuf, len, 256, argv);
-
-	if (argc <= 0) return 0;
+	if (argc < 0) return 0;
 
 	this = head;
 	this->refcount++;	/* so we can free it later */
