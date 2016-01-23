@@ -52,7 +52,7 @@ typedef enum cli_type_t {
 	CLI_TYPE_ALTERNATE,
 	CLI_TYPE_MACRO,
 	CLI_TYPE_PLUS,
-	CLI_TYPE_HELP		/* fake node */
+	CLI_TYPE_FORCE_EXACT   	/* fake node */
 } cli_type_t;
 
 /*
@@ -1216,7 +1216,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		assert(0 == 1);
 		return NULL;
 
-	case CLI_TYPE_HELP:
+	case CLI_TYPE_FORCE_EXACT:
 		assert(next == NULL);
 		type = CLI_TYPE_EXACT; /* bypass the keyword checks below */
 		break;
@@ -2509,7 +2509,7 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 
 	next = this;
 	for (i = match - 1; i >= 0; i--) {
-		a = syntax_alloc(CLI_TYPE_HELP, argv[i], NULL); /* don't do case checking */
+		a = syntax_alloc(CLI_TYPE_FORCE_EXACT, argv[i], NULL); /* don't do case checking */
 		assert(a != NULL);
 
 		this = syntax_alloc(CLI_TYPE_CONCAT, a, next);
@@ -2752,7 +2752,7 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 {
 	cli_syntax_t *this;
 
-	this = syntax_alloc(CLI_TYPE_HELP, (void *) help, NULL);
+	this = syntax_alloc(CLI_TYPE_FORCE_EXACT, (void *) help, NULL);
 	assert(this != NULL);
 	this->length = flag; /* internal flag... */
 
