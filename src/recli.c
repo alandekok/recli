@@ -67,6 +67,13 @@ static ctx_stack_t *ctx_stack = NULL;
 
 extern pid_t child_pid;
 
+typedef void (*builtin_func_t)(int , char **);
+
+typedef struct builtin_t {
+	char const	*name;
+	builtin_func_t	function;
+} builtin_t;
+
 static void catch_sigquit(int sig)
 {
 	if (child_pid > 1) {
@@ -154,7 +161,7 @@ int foundquote(const char *buf, size_t len, char c)
 /*
  *	Callback from linenoise when '?' is pressed.
  */
-static int foundhelp(const char *line, size_t len, UNUSED char c)
+static int short_help(const char *line, size_t len, UNUSED char c)
 {
 	int argc;
 	char *argv[256];
@@ -184,47 +191,9 @@ static int foundhelp(const char *line, size_t len, UNUSED char c)
 	return 1;
 }
 
-static int do_help(int argc, char **argv)
-{
-	int rcode;
-	char const *help;
-	char const *error;
-
-	/*
-	 *	Show the current syntax
-	 */
-	if ((argc >= 1) && (strcmp(argv[0], "syntax") == 0)) {
-		syntax_print_lines(ctx_stack->syntax);
-		return 1;
-	}
-
-	rcode = syntax_check(ctx_stack->syntax, argc, argv, &error);
-	if (rcode < 0) {
-		if (!error) {
-			fprintf(stderr, "Invalid input\n");
-		} else {
-			fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, error);
-		}
-
-		return 0;
-	}
-
-	/*
-	 *	Print short help text first
-	 */
-	syntax_print_context_help(ctx_stack->help, argc, argv);
-
-	help = syntax_show_help(ctx_stack->help, argc, argv);
-	if (!help) {
-		recli_fprintf(recli_stdout, "\r\n");
-	} else {
-		recli_fprintf_words(recli_stdout, "%s", help);
-	}
-
-	return 1;
-}
-
-
+/*
+ *	Stack functions
+ */
 static void ctx_stack_pop(void)
 {
 	if (ctx_stack_index == 0) return;
@@ -308,11 +277,91 @@ static void ctx_stack_push(int argc)
 	ctx_stack = next;
 }
 
+
+/*
+ *	Builtin commands
+ */
+static void builtin_help(int argc, char **argv)
+{
+	int rcode;
+	char const *help;
+	char const *error;
+
+	/*
+	 *	Show the current syntax
+	 */
+	if ((argc >= 1) && (strcmp(argv[0], "syntax") == 0)) {
+		syntax_print_lines(ctx_stack->syntax);
+		return;
+	}
+
+	rcode = syntax_check(ctx_stack->syntax, argc, argv, &error);
+	if (rcode < 0) {
+		if (!error) {
+			fprintf(stderr, "Invalid input\n");
+		} else {
+			fprintf(stderr, "Invalid input in word %d - '%s'\n", -rcode, error);
+		}
+
+		return;
+	}
+
+	if (!ctx_stack->help) return;
+
+	/*
+	 *	Print short help text first
+	 */
+	syntax_print_context_help(ctx_stack->help, argc, argv);
+
+	help = syntax_show_help(ctx_stack->help, argc, argv);
+	if (!help) {
+		recli_fprintf(recli_stdout, "\r\n");
+	} else {
+		recli_fprintf_words(recli_stdout, "%s", help);
+	}
+
+	return;
+}
+
+/*
+ *	The built-in commands don't bother checking for too
+ *	much input.  They also take priority over user
+ *	commands.
+ */
+static void builtin_end(UNUSED int argc, UNUSED char *argv[])
+{
+	while (ctx_stack_index > 0) ctx_stack_pop();
+}
+
+static void builtin_exit(UNUSED int argc, UNUSED char *argv[])
+{
+	if (ctx_stack_index == 0) {
+		exit(0);
+	}
+
+	ctx_stack_pop();
+	printf("%s\n", ctx_line_buf);
+}
+
+static void builtin_quit(UNUSED int argc, UNUSED char *argv[])
+{
+	exit(0);
+}
+
+static builtin_t builtin_commands[] = {
+	{ "end", builtin_end },
+	{ "exit", builtin_exit },
+	{ "help", builtin_help },
+	{ "logout", builtin_quit },
+	{ "quit", builtin_quit },
+	{ NULL, NULL }
+};
+
 static char const *spaces = "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ";
 
 static void process(int tty, char *line)
 {
-	int argc, c;
+	int i, c, argc;
 	int runit = 1;
 	size_t len = strlen(line);
 	const char *error;
@@ -343,34 +392,11 @@ static void process(int tty, char *line)
 		goto done;
 	}
 
-	/*
-	 *	The built-in commands don't bother checking for too
-	 *	much input.  They also take priority over user
-	 *	commands.
-	 */
-	if (strcmp(argv[0], "exit") == 0) {
-		if (ctx_stack_index == 0) {
-			exit(0);
+	for (i = 0; builtin_commands[i].name != NULL; i++) {
+		if (strcmp(argv[0], builtin_commands[i].name) == 0) {
+			builtin_commands[i].function(argc - 1, argv + 1);
+			goto done;
 		}
-
-		ctx_stack_pop();
-		printf("%s\n", ctx_line_buf);
-		goto done;
-	}
-
-	if (strcmp(argv[0], "end") == 0) {
-		while (ctx_stack_index > 0) ctx_stack_pop();
-		goto done;
-	}
-
-	if ((strcmp(argv[0], "quit") == 0) ||
-	    (strcmp(argv[0], "logout") == 0)) {
-		exit(0);
-	}
-
-	if (strcmp(argv[0], "help") == 0) {
-		do_help(argc - 1, argv + 1);
-		goto done;
 	}
 
 	/*
@@ -593,7 +619,7 @@ int main(int argc, char **argv)
 	linenoiseSetCharacterCallback(foundspace, ' ');
 	linenoiseSetCharacterCallback(foundquote, '"');
 	linenoiseSetCharacterCallback(foundquote, '\'');
-	linenoiseSetCharacterCallback(foundhelp, '?');
+	linenoiseSetCharacterCallback(short_help, '?');
 
 	if (config.dir) {
 		if (recli_bootstrap(&config) < 0) {
