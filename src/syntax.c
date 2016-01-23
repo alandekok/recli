@@ -2008,6 +2008,8 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		if (this->next) return 0;
 
 		if (sense == CLI_MATCH_PREFIX) {
+			if (!word) return 0;
+
 			if (strncmp((char *) this->first, word, strlen(word)) != 0) return 0;
 		}
 
@@ -2546,6 +2548,7 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 
 	memcpy(mybuf, in, len + 1);
 	argc = str2argv(mybuf, len, 256, argv);
+
 	if (argc <= 0) return 0;
 
 	this = head;
@@ -2602,23 +2605,6 @@ int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 	}
 
 	if (!this) return 0;
-
-	/*
-	 *	If there's only one choice, return it.
-	 */
-	if (!word && (this->type == CLI_TYPE_CONCAT)) {
-		cli_syntax_t *a;
-
-		a = this->first;
-		if ((a->type == CLI_TYPE_EXACT) && !a->next) {
-			strcpy(p, (char *) a->first);
-			strcat(p, " ");
-
-			tabs[0] = strdup(buffer);
-			syntax_free(this);
-			return 1;
-		}
-	}
 
 	argc = syntax_prefix_words(256, argv, word, exact, this, NULL);
 	if (argc > max_tabs) argc = max_tabs;
