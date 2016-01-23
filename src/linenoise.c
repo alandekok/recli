@@ -905,6 +905,8 @@ static int completeLine(struct current *current) {
                 case '\t': /* tab */
 		   if (lc.len == 1) {
 			   set_current(current,lc.cvec[0]);
+			   c = 0;
+			   stop = 1;
 			   break;
 		    }
 
