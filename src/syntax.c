@@ -2509,7 +2509,7 @@ cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[])
 
 	next = this;
 	for (i = match - 1; i >= 0; i--) {
-		a = syntax_alloc(CLI_TYPE_EXACT, argv[i], NULL);
+		a = syntax_alloc(CLI_TYPE_HELP, argv[i], NULL); /* don't do case checking */
 		assert(a != NULL);
 
 		this = syntax_alloc(CLI_TYPE_CONCAT, a, next);
