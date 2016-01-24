@@ -40,7 +40,7 @@ extern int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 extern int syntax_parse_help(const char *filename, cli_syntax_t **phead);
 extern const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[]);
-extern int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *argv[]);
+extern int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *help, int argc, char *argv[]);
 extern cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp);
 
 typedef int (*recli_datatype_parse_t)(const char*);

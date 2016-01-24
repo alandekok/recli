@@ -186,7 +186,7 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 	if (argc < 0) goto do_print;
 
 	syntax_print_context_help(ctx_stack->help, argc, argv);
-	syntax_print_context_help_subcommands(ctx_stack->help, argc, argv);
+	syntax_print_context_help_subcommands(ctx_stack->syntax, ctx_stack->help, argc, argv);
 
 	return 1;
 }

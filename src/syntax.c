@@ -3073,7 +3073,7 @@ static void syntax_help_subcommand(char const *start, cli_syntax_t *a)
 }
 
 
-int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *argv[])
+int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *head, int argc, char *argv[])
 {
 	int i;
 	size_t len, bufsize;
@@ -3083,8 +3083,34 @@ int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *ar
 
 	if (!head || (argc < 0)) return -1;
 
+	/*
+	 *	Try to find the help.  If there is none, print the
+	 *	syntax at the current point.
+	 */
 	help = syntax_match_max(head, argc, argv);
-	if (!help) return -1;
+	if (!help) {
+		int i, sub_argc;
+		char *sub_argv[256];
+
+		a = syntax_match_max(syntax, argc, argv);
+		if (!a) return -1;
+
+		b = syntax_skip_prefix(a, argc);
+		if (!b) {
+			syntax_free(a);
+			return -1;
+		}
+
+		sub_argc = syntax_prefix_words(256, sub_argv, NULL, CLI_MATCH_EXACT, b, NULL);
+
+		for (i = 0; i < sub_argc; i++) {
+			recli_fprintf(recli_stdout, "%s\r\n", sub_argv[i]);
+		}
+
+		syntax_free(a);
+		syntax_free(b);
+		return 0;
+	}
 
 	p = buffer;
 	bufsize = sizeof(buffer);
@@ -3096,10 +3122,14 @@ int syntax_print_context_help_subcommands(cli_syntax_t *head, int argc, char *ar
 	}
 
 	/*
-	 *	Skip the prefix
+	 *	Skip the prefix.
 	 */
 	a = help;
 
+	/*
+	 *	FIXME: loop over syntax_prefix_words(), and for each one, skip it,
+	 *	and print out the help which is after it, if any?
+	 */
 	for (i = 0; i < argc; i++) {
 		if (a->type != CLI_TYPE_CONCAT) {
 			if (i != (argc - 1)) {
