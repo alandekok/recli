@@ -2882,6 +2882,8 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 		p = strchr(buffer, '\n');
 		if (p) *p = '\0';
 
+		if ((p == buffer) && !*p) continue; /* skip leading blank lines */
+
 		strcat(buffer, "\r\n");
 
 		if (last && (strncmp(buffer, "    ", 4) == 0)) {
