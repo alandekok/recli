@@ -231,8 +231,8 @@ static int syntax_order(const cli_syntax_t *a, const cli_syntax_t *b)
 		/*
 		 *	Real keywords come first.
 		 */
-		if (a->next && !b->next) return -1;
-		if (!a->next && b->next) return +1;
+		if (a->next && !b->next) return +1;
+		if (!a->next && b->next) return -1;
 
 		return strcmp((char *)a->first, (char *) b->first);
 	}
