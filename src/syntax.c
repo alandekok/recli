@@ -2005,8 +2005,6 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
-		if (this->next) return 0;
-
 		if (sense == CLI_MATCH_PREFIX) {
 			if (!word) return 0;
 
