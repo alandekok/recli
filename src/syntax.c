@@ -2986,6 +2986,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	if (!help) return -1;
 
 	p = buffer;
+	*p = '\0';
 	bufsize = sizeof(buffer);
 
 	for (i = 0; i < argc; i++) {
@@ -3018,8 +3019,13 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 		b = a->first;
 
 		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-			recli_fprintf(recli_stdout, "%s- %s\r\n",
-				      buffer, (char *) b->first);
+			if (!*buffer) {
+				recli_fprintf(recli_stdout, "%s\r\n\r\n",
+					      (char *) b->first);
+			} else {
+				recli_fprintf(recli_stdout, "%s- %s\r\n",
+					      buffer, (char *) b->first);
+			}
 			syntax_free(help);
 			return 1;
 		}
