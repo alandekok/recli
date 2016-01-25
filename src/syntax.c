@@ -1991,7 +1991,7 @@ int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
 
 
 /*
- *	Returns a NEW ref which matches the word
+ *	Returns how many prefixes match the given word.
  */
 static int syntax_prefix_words(int argc, char *argv[], char const *word, int sense,
 			       cli_syntax_t *this, cli_syntax_t *next)
@@ -2884,13 +2884,13 @@ int syntax_parse_help(const char *filename, cli_syntax_t **plong, cli_syntax_t *
 
 		if ((p == buffer) && !*p) continue; /* skip leading blank lines */
 
-		strcat(buffer, "\r\n");
-
 		if (last && (strncmp(buffer, "    ", 4) == 0)) {
 			last->refcount++;
 			add_help(&short_syntax, last, buffer + 4, 2);
 			continue;
 		}
+
+		strcat(buffer, "\r\n");
 
 		len = strlen(buffer);
 		if ((h + len) >= (help + sizeof(help))) {
@@ -3018,7 +3018,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 		b = a->first;
 
 		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-			recli_fprintf(recli_stdout, "%s- %s\n",
+			recli_fprintf(recli_stdout, "%s- %s\r\n",
 				      buffer, (char *) b->first);
 			syntax_free(help);
 			return 1;
@@ -3030,7 +3030,7 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	b = a;
 
 	if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-		recli_fprintf(recli_stdout, "%s- %s",
+		recli_fprintf(recli_stdout, "%s- %s\r\n",
 			      buffer, (char *) b->first);
 		syntax_free(help);
 		return 1;
@@ -3041,50 +3041,116 @@ int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[])
 	return 0;
 }
 
-static void syntax_help_subcommand(char const *start, cli_syntax_t *a)
+static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
+			       cli_syntax_t *this, cli_syntax_t *next)
 {
-	char const *name = NULL;
-	cli_syntax_t *b;
+	int matches, total;
+	cli_syntax_t *a, *b, *c;
 
-	if (a->type != CLI_TYPE_CONCAT) return;
+	assert(this != NULL);
 
-	b = a->first;
-	if (b->type != CLI_TYPE_EXACT) return;
-	if (b->length != 0) return;
+	if (argc == 0) return 0;
 
-	name = (char *) b->first;
+	switch (this->type) {
+	case CLI_TYPE_EXACT:
+		if (this->length != 2) {
+			argv[0] = this->first;
+			help_text[0] = NULL;
+		} else {
+			argv[0] = NULL;
+			help_text[0] = this->first;
+		}
+		return 1;
 
-	a = a->next;
-	while (a->type == CLI_TYPE_ALTERNATE) {
-		b = a->first;
+	case CLI_TYPE_VARARGS:
+		argv[0] = this->first;
+		help_text[0] = NULL;
+		return 1;
 
-		/*
-		 *	The short help text already has a trailing CR/LF
-		 */
-		if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-			recli_fprintf(recli_stdout, "%s%s - %s", start, name, (char *) b->first);
-			return;
+	case CLI_TYPE_KEY:
+	case CLI_TYPE_OPTIONAL:
+		matches = syntax_prefix_help(argc, argv, help_text, this->first, next);
+		argc -= matches;
+		argv += matches;
+		help_text += matches;
+
+		if (!next) return matches;
+
+		return matches + syntax_prefix_help(argc, argv, help_text, next, NULL);
+
+	case CLI_TYPE_CONCAT:
+		a = this->first;
+		b = this->next;
+
+		c = this->next;
+		if (next) {
+			c->refcount++;
+			next->refcount++;
+			c = syntax_alloc(CLI_TYPE_CONCAT, this->next, next);
+			assert(c != this);
 		}
 
-		a = a->next;
+		/*
+		 *	Catch the special case of "cmd HELP_TEXT"
+		 *
+		 *	FIXME: this is all complicated... we should switch the
+		 *	entire implementation to just fan-out tries.  The only
+		 *	reason to have the complexity of the "normal form" is for
+		 *	longest common suffix, which we no longer have.
+		 */
+		if (a->type == CLI_TYPE_EXACT) {
+			if ((b->type == CLI_TYPE_EXACT) &&
+			    (b->length == 2)) {
+				help_text[0] = b->first;
+				return 1;
+			}
+
+			if ((b->type == CLI_TYPE_ALTERNATE) ||
+			    (b->type == CLI_TYPE_OPTIONAL)) {
+				help_text[0] = NULL;
+				matches = syntax_prefix_help(argc, argv, help_text, b->first, c);
+			};
+
+			/*
+			 *	Over-write anything...
+			 */
+			argv[0] = a->first;
+			matches = 1;
+		} else {
+			matches = syntax_prefix_help(argc, argv, help_text, this->first, c);
+		}
+		if (next) syntax_free(c);
+		return matches;
+
+	case CLI_TYPE_ALTERNATE:
+		total = 0;
+		while (this->type == CLI_TYPE_ALTERNATE) {
+			matches = syntax_prefix_help(argc, argv, help_text,
+						      this->first, next);
+			argc -= matches;
+			argv += matches;
+			help_text += matches;
+			total += matches;
+			this = this->next;
+		}
+		assert(this->type != CLI_TYPE_ALTERNATE);
+
+		return total + syntax_prefix_help(argc, argv, help_text, this, next);
+
+	default:
+		break;
 	}
 
-	b = a;
-
-	if ((b->type == CLI_TYPE_EXACT) && (b->length == 2)) {
-		recli_fprintf(recli_stdout, "%s%s - %s", start, name, (char *) b->first);
-		return;
-	}
+	return 0;
 }
-
 
 int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *head, int argc, char *argv[])
 {
-	int i;
-	size_t len, bufsize;
-	cli_syntax_t *help, *a, *b;
-	char *p;
-	char buffer[1024];
+	int i, j, k, cmds_argc, help_argc;
+	cli_syntax_t *help, *cmds, *a;
+	char *cmds_argv[256];
+	char *help_argv[256];
+	char *help_text[256];
 
 	if (!head || (argc < 0)) return -1;
 
@@ -3093,80 +3159,75 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 	 *	syntax at the current point.
 	 */
 	help = syntax_match_max(head, argc, argv);
-	if (!help) {
-		int i, sub_argc;
-		char *sub_argv[256];
+	cmds = syntax_match_max(syntax, argc, argv);
 
-		a = syntax_match_max(syntax, argc, argv);
-		if (!a) return -1;
+	if (!help && !cmds) return -1;
 
-		b = syntax_skip_prefix(a, argc);
-		if (!b) {
-			syntax_free(a);
-			return -1;
-		}
+	cmds_argc = 0;
+	if (cmds) {
+		a = syntax_skip_prefix(cmds, argc);
+		syntax_free(cmds);
+		cmds = a;
 
-		sub_argc = syntax_prefix_words(256, sub_argv, NULL, CLI_MATCH_EXACT, b, NULL);
-
-		for (i = 0; i < sub_argc; i++) {
-			recli_fprintf(recli_stdout, "%s\r\n", sub_argv[i]);
-		}
-
-		syntax_free(a);
-		syntax_free(b);
-		return 0;
+		memset(cmds_argv, 0, sizeof(cmds_argv));
+		if (cmds) cmds_argc = syntax_prefix_words(256, cmds_argv, NULL, CLI_MATCH_EXACT, cmds, NULL);
 	}
 
-	p = buffer;
-	bufsize = sizeof(buffer);
+	help_argc = 0;
+	if (help) {
+		a = syntax_skip_prefix(help, argc);
+		syntax_free(help);
+		help = a;
 
-	if (argc != 0) {
-		len = snprintf(p, bufsize, "... ");
-		p += len;
-		bufsize -= len;
+		memset(help_argv, 0, sizeof(help_argv));
+		if (help) help_argc = syntax_prefix_help(256, help_argv, help_text, help, NULL);
 	}
 
-	/*
-	 *	Skip the prefix.
-	 */
-	a = help;
+	k = 0;
 
-	/*
-	 *	FIXME: loop over syntax_prefix_words(), and for each one, skip it,
-	 *	and print out the help which is after it, if any?
-	 */
-	for (i = 0; i < argc; i++) {
-		if (a->type != CLI_TYPE_CONCAT) {
-			if (i != (argc - 1)) {
-				syntax_free(help);
-				return 0;
+#if 0
+	printf("CMDS %d\r\n", cmds_argc);
+	for (i = 0; i < cmds_argc; i++) {
+		printf("%d - %s\r\n", i, cmds_argv[i]);
+	}
+
+	printf("HELP %d\r\n", help_argc);
+	for (i = 0; i < help_argc; i++) {
+		printf("%d - %s\r\n", i, help_argv[i]);
+	}
+
+	for (i = 0; i < help_argc; i++) {
+		printf("%d - %s\r\n", i, help_text[i]);
+	}
+#endif
+
+	for (i = 0; i < cmds_argc; i++) {
+		if (!cmds_argv[i]) continue;
+
+		if (argc > 0) recli_fprintf(recli_stdout, "... ");
+
+		for (j = k; j < help_argc; j++) {
+			if (!help_argv[j]) continue; /* e.g. "show" versus "show subscriber" */
+
+			if ((strcmp(cmds_argv[i], help_argv[j]) == 0) && help_text[j]) {
+				recli_fprintf(recli_stdout, "%s - %s\r\n", cmds_argv[i], help_text[j]);
+				k++;
+				break;
 			}
-			break;
 		}
 
-		b = a->first;
-		assert(b->type == CLI_TYPE_EXACT);
-
-		a = a->next;
-	}
-
-	while (a->type == CLI_TYPE_ALTERNATE) {
-		b = a->first;
-
-		if (b->type != CLI_TYPE_EXACT) {
-			syntax_help_subcommand(buffer, b);
+		/*
+		 *	No help, just print out the command.
+		 *
+		 *	FIXME: print out automatic help for built-in data types.
+		 */
+		if (j == help_argc) {
+			recli_fprintf(recli_stdout, "%s -\r\n", cmds_argv[i]);
 		}
-
-		a = a->next;
 	}
 
-	b = a;
-
-	if (b->type != CLI_TYPE_EXACT) {
-		syntax_help_subcommand(buffer, b);
-	}
-
-	syntax_free(help);
+	if (help) syntax_free(help);
+	if (cmds) syntax_free(cmds);
 
 	return 0;
 }
