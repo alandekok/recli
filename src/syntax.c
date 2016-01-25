@@ -2775,15 +2775,16 @@ static void add_help(cli_syntax_t **phead, cli_syntax_t *last,
 /*
  *	Parse a simplified Markdown "help" file into a syntax.
  */
-int syntax_parse_help(const char *filename, cli_syntax_t **phead)
+int syntax_parse_help(const char *filename, cli_syntax_t **plong, cli_syntax_t **pshort)
 {
 	int lineno, done;
 	FILE *fp;
 	char buffer[1024];
 	char *h, help[8192];
-	cli_syntax_t *head, *this, *last;
+	cli_syntax_t *this, *last;
+	cli_syntax_t *long_syntax, *short_syntax;
 
-	if (!phead) return -1;
+	if (!plong || !pshort) return -1;
 
 	fp = fopen(filename, "r");
 	if (!fp) {
@@ -2793,7 +2794,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 	}
 
 	done = lineno = 0;
-	last = head = NULL;
+	last = long_syntax = short_syntax = NULL;
 	h = NULL;
 
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
@@ -2825,7 +2826,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 			h = help;
 			while (isspace((int) *h)) h++;
 			if (*h) {
-				add_help(&head, last, help, 1);
+				add_help(&long_syntax, last, help, 1);
 			} else {
 				syntax_free(last);
 			}
@@ -2861,7 +2862,8 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 			error:
 				recli_fprintf(recli_stderr, "%s line %d: Invalid syntax \"%s\"\n",
 					filename, lineno, buffer);
-				syntax_free(head);
+				syntax_free(long_syntax);
+				syntax_free(short_syntax);
 				if (last) syntax_free(last);
 				fclose(fp);
 				return -1;
@@ -2886,7 +2888,7 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 		if (last && (strncmp(buffer, "    ", 4) == 0)) {
 			last->refcount++;
-			add_help(&head, last, buffer + 4, 2);
+			add_help(&short_syntax, last, buffer + 4, 2);
 			continue;
 		}
 
@@ -2894,7 +2896,8 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 		if ((h + len) >= (help + sizeof(help))) {
 			recli_fprintf(recli_stderr, "%s line %d: Too much help text\n",
 				filename, lineno);
-			syntax_free(head);
+			syntax_free(long_syntax);
+			syntax_free(short_syntax);
 			if (last) syntax_free(last);
 			return -1;
 		}
@@ -2912,7 +2915,9 @@ int syntax_parse_help(const char *filename, cli_syntax_t **phead)
 
 	fclose(fp);
 
-	*phead = head;
+	*plong = long_syntax;
+	*pshort = short_syntax;
+       
 
 	return 0;
 }

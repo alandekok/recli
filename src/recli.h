@@ -37,7 +37,7 @@ extern void syntax_printf(const cli_syntax_t *syntax);
 extern void syntax_print_lines(const cli_syntax_t *this);
 extern int syntax_tab_complete(cli_syntax_t *head, const char *in, size_t len,
 			       int max_tabs, char *tabs[]);
-extern int syntax_parse_help(const char *filename, cli_syntax_t **phead);
+extern int syntax_parse_help(const char *filename, cli_syntax_t **plong, cli_syntax_t **pshort);
 extern const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *help, int argc, char *argv[]);
@@ -60,7 +60,8 @@ typedef struct recli_config_t {
 	char	   *envp[128];
 	cli_syntax_t *syntax;
 	ino_t		syntax_inode;
-	cli_syntax_t *help;
+	cli_syntax_t	*long_help;
+	cli_syntax_t	*short_help;
 	cli_permission_t *permissions;
 } recli_config_t;
 

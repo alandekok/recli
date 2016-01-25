@@ -327,11 +327,10 @@ int recli_bootstrap(recli_config_t *config)
 
 	if (recli_load_syntax(config) < 0) return -1;
 
-	if (!config->help) {
+	if (!config->long_help && !config->short_help) {
 		snprintf(buffer, sizeof(buffer), "%s/help.md", config->dir);
-
 		if (stat(buffer, &statbuf) >= 0) {
-			if (syntax_parse_help(buffer, &(config->help)) < 0) {
+			if (syntax_parse_help(buffer, &(config->long_help), &(config->short_help)) < 0) {
 				return -1;
 			}
 		}

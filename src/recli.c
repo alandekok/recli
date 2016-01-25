@@ -20,7 +20,8 @@ static recli_config_t config = {
 	.prompt = NULL,
 	.banner = NULL,
 	.syntax = NULL,
-	.help = NULL,
+	.short_help = NULL,
+	.long_help = NULL,
 	.permissions = NULL
 };
 
@@ -51,7 +52,8 @@ typedef struct ctx_stack_t {
 	int		max_argc;
 
 	cli_syntax_t	*syntax;
-	cli_syntax_t	*help;
+	cli_syntax_t	*short_help;
+	cli_syntax_t	*long_help;
 } ctx_stack_t;
 
 
@@ -174,7 +176,7 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 
 	printf("?\r\n");
 
-	if (!ctx_stack->help) {
+	if (!ctx_stack->short_help) {
 	do_print:
 		syntax_print_lines(ctx_stack->syntax);
 		return 1;
@@ -185,8 +187,8 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 
 	if (argc < 0) goto do_print;
 
-	syntax_print_context_help(ctx_stack->help, argc, argv);
-	syntax_print_context_help_subcommands(ctx_stack->syntax, ctx_stack->help, argc, argv);
+	syntax_print_context_help(ctx_stack->short_help, argc, argv);
+	syntax_print_context_help_subcommands(ctx_stack->syntax, ctx_stack->short_help, argc, argv);
 
 	return 1;
 }
@@ -200,7 +202,8 @@ static void ctx_stack_pop(void)
 
 	assert(ctx_stack->syntax != NULL);
 	syntax_free(ctx_stack->syntax);
-	if (ctx_stack->help) syntax_free(ctx_stack->help);
+	if (ctx_stack->long_help) syntax_free(ctx_stack->long_help);
+	if (ctx_stack->short_help) syntax_free(ctx_stack->short_help);
 
 	ctx_stack_index--;
 	ctx_stack--;
@@ -237,16 +240,28 @@ static void ctx_stack_push(int argc)
 	assert(next->syntax != NULL);
 	syntax_free(match);
 
-	if (ctx_stack->help) {
-		match = syntax_match_max(ctx_stack->help, argc, ctx_stack->argv);
+	if (ctx_stack->short_help) {
+		match = syntax_match_max(ctx_stack->short_help, argc, ctx_stack->argv);
 		if (match) {
-			next->help = syntax_skip_prefix(match, argc);
+			next->short_help = syntax_skip_prefix(match, argc);
 			syntax_free(match);
 		} else {
-			next->help = NULL;
+			next->short_help = NULL;
 		}
 	} else {
-		next->help = NULL;
+		next->short_help = NULL;
+	}
+
+	if (ctx_stack->long_help) {
+		match = syntax_match_max(ctx_stack->long_help, argc, ctx_stack->argv);
+		if (match) {
+			next->long_help = syntax_skip_prefix(match, argc);
+			syntax_free(match);
+		} else {
+			next->long_help = NULL;
+		}
+	} else {
+		next->long_help = NULL;
 	}
 
 	len = strlen(ctx_stack->buf);
@@ -306,14 +321,14 @@ static void builtin_help(int argc, char **argv)
 		return;
 	}
 
-	if (!ctx_stack->help) return;
+	if (!ctx_stack->long_help) return;
 
 	/*
 	 *	Print short help text first
 	 */
-	syntax_print_context_help(ctx_stack->help, argc, argv);
+	syntax_print_context_help(ctx_stack->long_help, argc, argv);
 
-	help = syntax_show_help(ctx_stack->help, argc, argv);
+	help = syntax_show_help(ctx_stack->long_help, argc, argv);
 	if (!help) {
 		recli_fprintf(recli_stdout, "\r\n");
 	} else {
@@ -531,7 +546,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'H':
-			if (syntax_parse_help(optarg, &config.help) < 0) exit(1);
+			if (syntax_parse_help(optarg, &config.long_help, &config.short_help) < 0) exit(1);
 			break;
 
 		case 'p':
@@ -662,7 +677,8 @@ int main(int argc, char **argv)
 	ctx_stack->argv_bufsize = sizeof(ctx_argv_buf);
 
 	ctx_stack->syntax = config.syntax;
-	ctx_stack->help = config.help;
+	ctx_stack->long_help = config.long_help;
+	ctx_stack->short_help = config.short_help;
 
 	ctx_stack->prompt = prompt_full;
 
@@ -673,7 +689,8 @@ int main(int argc, char **argv)
 done:
 	while (ctx_stack_index > 0) ctx_stack_pop();
 
-	if (config.help) syntax_free(config.help);
+	if (config.short_help) syntax_free(config.short_help);
+	if (config.long_help) syntax_free(config.long_help);
 	syntax_free(config.syntax);
 	permission_free(config.permissions);
 
