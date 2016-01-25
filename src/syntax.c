@@ -3154,7 +3154,9 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 {
 	int i, j, k, cmds_argc, help_argc;
 	cli_syntax_t *help, *cmds, *a;
+	size_t max_len;
 	char *cmds_argv[256];
+	size_t cmds_len[256];
 	char *help_argv[256];
 	char *help_text[256];
 
@@ -3207,6 +3209,18 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 	}
 #endif
 
+	max_len = 0;
+	for (i = 0; i < cmds_argc; i++) {
+		if (!cmds_argv[i]) {
+			cmds_len[i] = 0;
+			continue;
+		}
+
+		cmds_len[i] = strlen(cmds_argv[i]);
+		if (max_len < cmds_len[i]) max_len = cmds_len[i];
+	}
+	max_len += 4;
+
 	for (i = 0; i < cmds_argc; i++) {
 		if (!cmds_argv[i]) continue;
 
@@ -3216,7 +3230,8 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 			if (!help_argv[j]) continue; /* e.g. "show" versus "show subscriber" */
 
 			if ((strcmp(cmds_argv[i], help_argv[j]) == 0) && help_text[j]) {
-				recli_fprintf(recli_stdout, "%s - %s\r\n", cmds_argv[i], help_text[j]);
+				recli_fprintf(recli_stdout, "%s%.*s%s\r\n", cmds_argv[i],
+					      (int) max_len - cmds_len[i], spaces, help_text[j]);
 				k++;
 				break;
 			}
@@ -3228,7 +3243,7 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 		 *	FIXME: print out automatic help for built-in data types.
 		 */
 		if (j == help_argc) {
-			recli_fprintf(recli_stdout, "%s -\r\n", cmds_argv[i]);
+			recli_fprintf(recli_stdout, "%s\r\n", cmds_argv[i]);
 		}
 	}
 
