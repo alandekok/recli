@@ -2016,7 +2016,6 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		return 1;
 
 	case CLI_TYPE_KEY:
-	case CLI_TYPE_OPTIONAL:
 		matches = syntax_prefix_words(argc, argv, word, sense, this->first, next);
 		argc -= matches;
 		argv += matches;
@@ -2024,6 +2023,24 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		if (!next) return matches;
 
 		return matches + syntax_prefix_words(argc, argv, word, sense, next, NULL);
+
+	case CLI_TYPE_OPTIONAL:
+		/*
+		 *	Note first that there's an empty option.
+		 */
+		argv[0] = "";
+		argc--;
+		argv++;
+		total = 1;
+
+		matches = syntax_prefix_words(argc, argv, word, sense, this->first, next);
+		argc -= matches;
+		argv += matches;
+		total += matches;
+
+		if (!next) return total;
+
+		return total + syntax_prefix_words(argc, argv, word, sense, next, NULL);
 
 	case CLI_TYPE_CONCAT:
 		a = this->next;
@@ -3074,7 +3091,6 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 		return 1;
 
 	case CLI_TYPE_KEY:
-	case CLI_TYPE_OPTIONAL:
 		matches = syntax_prefix_help(argc, argv, help_text, this->first, next);
 		argc -= matches;
 		argv += matches;
@@ -3083,6 +3099,27 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 		if (!next) return matches;
 
 		return matches + syntax_prefix_help(argc, argv, help_text, next, NULL);
+
+	case CLI_TYPE_OPTIONAL:
+		/*
+		 *	Note first that there's an empty option.
+		 */
+		argv[0] = "";
+		help_text[0] = "";
+		argc--;
+		argv++;
+		help_text++;
+		total = 1;
+
+		matches = syntax_prefix_help(argc, argv, help_text, this->first, next);
+		argc -= matches;
+		argv += matches;
+		help_text += matches;
+		total += matches;
+
+		if (!next) return total;
+
+		return total + syntax_prefix_help(argc, argv, help_text, next, NULL);
 
 	case CLI_TYPE_CONCAT:
 		a = this->first;
@@ -3112,11 +3149,7 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 				return 1;
 			}
 
-			if ((b->type == CLI_TYPE_ALTERNATE) ||
-			    (b->type == CLI_TYPE_OPTIONAL)) {
-				help_text[0] = NULL;
-				matches = syntax_prefix_help(argc, argv, help_text, b->first, c);
-			};
+			matches = syntax_prefix_help(argc, argv, help_text, b->first, c);
 
 			/*
 			 *	Over-write anything...
