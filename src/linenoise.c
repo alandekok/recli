@@ -1196,8 +1196,7 @@ process_char:
 		if (!historyCallback) {
 			set_current(current, history[history_len-1-history_index]);
 		} else {
-			set_current(current, history[history_len-1-history_index] +
-				    historyCallback(history[history_len-1-history_index]));
+			set_current(current, historyCallback(history[history_len-1-history_index]));
 		}
                 refreshLine(current->prompt, current);
             }
