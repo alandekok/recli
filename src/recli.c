@@ -310,8 +310,6 @@ static void ctx_stack_push(int argc)
 	next->bufsize = ctx_stack->bufsize - len;
 
 	next->argv_buf = &ctx_argv_buf[0] + (next->buf - &ctx_line_buf[0]);
-
-	next->argv_buf = ctx_stack->argv[argc - 1] + 1;
 	next->argv_bufsize = next->bufsize;
 
 	next->argv = ctx_stack->argv + argc;
