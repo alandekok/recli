@@ -1181,8 +1181,10 @@ process_char:
             if (history_len > 1) {
                 /* Update the current history entry before to
                  * overwrite it with tne next one. */
+#if 0
                 free(history[history_len-1-history_index]);
                 history[history_len-1-history_index] = strdup(current->buf);
+#endif
                 /* Show the new entry */
                 history_index += dir;
                 if (history_index < 0) {
