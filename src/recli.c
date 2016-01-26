@@ -268,6 +268,7 @@ static void ctx_stack_push(int argc)
 
 	ctx_stack->buf[len++] = ' ';
 	ctx_stack->buf[len] = '\0';
+	ctx_stack->argc = argc;
 
 	ctx_stack->len = len;
 
@@ -283,7 +284,7 @@ static void ctx_stack_push(int argc)
 	next->argv[0] = NULL;
 
 	next->max_argc = ctx_stack->max_argc - argc;
-	next->argc = argc;
+	next->argc = 0;
 	next->total_argc = ctx_stack->total_argc + argc;
 
 	next->prompt = prompt_ctx;
