@@ -159,6 +159,8 @@ static int history_max_len = LINENOISE_DEFAULT_HISTORY_MAX_LEN;
 static int history_len = 0;
 static char **history = NULL;
 
+static linenoiseHistoryCallback *historyCallback = NULL;
+
 /* Structure to contain the status of the current (being edited) line */
 struct current {
     char *buf;  /* Current buffer. Always null terminated */
@@ -1190,7 +1192,13 @@ process_char:
                     history_index = history_len-1;
                     break;
                 }
-                set_current(current, history[history_len-1-history_index]);
+
+		if (!historyCallback) {
+			set_current(current, history[history_len-1-history_index]);
+		} else {
+			set_current(current, history[history_len-1-history_index] +
+				    historyCallback(history[history_len-1-history_index]));
+		}
                 refreshLine(current->prompt, current);
             }
             break;
@@ -1428,4 +1436,9 @@ int linenoiseCols(void)
     getWindowSize(&current);
 
     return current.cols;
+}
+
+void linenoiseSetHistoryCallback(linenoiseHistoryCallback *fn)
+{
+	historyCallback = fn;
 }
