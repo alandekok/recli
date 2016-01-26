@@ -54,7 +54,7 @@ int str2argv(char *buf, size_t len, int max_argc, char *argv[])
 		/*
 		 *	String: treat it as one block
 		 */
-		if ((*p == '"') || (*p == '\'')) {
+		if ((*p == '"') || (*p == '\'') || (*p == '`')) {
 			ssize_t quote;
 
 			quote = strquotelen(p);
@@ -84,7 +84,7 @@ int str2argv(char *buf, size_t len, int max_argc, char *argv[])
 		if (argv) argv[argc] = p;
 		argc++;
 
-		while (*p && (*p != '"') && (*p != '\'') &&
+		while (*p && (*p != '"') && (*p != '\'') && (*p != '`') &&
 		       !isspace((int) *p)) {
 			p++;
 		}
