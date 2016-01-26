@@ -193,6 +193,40 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 	return 1;
 }
 
+
+static const char *history_callback(const char *buffer)
+{
+	int i, j;
+	const char *p;
+
+	if (ctx_stack_index == 0) return buffer;
+
+	p = buffer;
+
+	for (i = 0; i < ctx_stack_index; i++) {
+		ctx_stack_t *c;
+
+		c = &ctx_stack_array[i];
+
+		for (j = 0; j < c->argc; j++) {
+			size_t len;
+
+			len = strlen(c->argv[j]);
+
+			if ((strncmp(c->argv[j], p, len) == 0) && isspace((int) p[len])) {
+				p += len + 1;
+				continue;
+			}
+
+			return p;
+		}
+	}
+
+
+	return p;
+}
+
+
 /*
  *	Stack functions
  */
@@ -630,6 +664,8 @@ int main(int argc, char **argv)
 
 			 linenoiseHistoryLoad(history_file); /* Load the history at startup */
 		 }
+
+		 linenoiseSetHistoryCallback(history_callback);
 	}
 
 	linenoiseSetCharacterCallback(foundspace, ' ');
