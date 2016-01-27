@@ -1130,9 +1130,7 @@ cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp)
 		return NULL;
 	}
 
-	assert(lcp <= a->length);
-
-	if (lcp == a->length) return NULL;
+	if (lcp >= a->length) return NULL;
 
 	while (lcp) {
 		a = a->next;
