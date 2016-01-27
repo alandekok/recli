@@ -2374,6 +2374,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 {
 	int words, total;
 	cli_syntax_t *a;
+	char const *alt_error = NULL;
 
 	*error = NULL;
 
@@ -2474,7 +2475,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	case CLI_TYPE_ALTERNATE:
 		total = 0;
-		words = syntax_check(a->first, argc, argv, error);
+		words = syntax_check(a->first, argc, argv, &alt_error);
 		if (words > 0) return words; /* found a match */
 
 		/*
@@ -2491,6 +2492,8 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 *	Return the longest error.
 		 */
 		if (total < words) return total;
+
+		*error = alt_error;
 		return words;
 
 
