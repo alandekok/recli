@@ -462,6 +462,7 @@ static void process(int tty, char *line)
 		 *	the c here will be -3, not -1.
 		 */
 		fprintf(stderr, "%s\n", ctx_stack->buf);
+
 		if (-c == argc) {
 			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[argc - 1] - ctx_stack->argv_buf), spaces);
 
@@ -471,7 +472,10 @@ static void process(int tty, char *line)
 		} else {
 			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c] - ctx_stack->argv_buf), spaces);
 		}
-		fprintf(stderr, " Parse error.\n");
+
+		if (!error) error = "Parse error";
+
+		fprintf(stderr, " %s.\n", error);
 		
 		runit = 0;
 		goto add_line;
@@ -535,6 +539,13 @@ add_line:
 		snprintf(buffer, sizeof(buffer), "%s/bin/",
 			 config.dir);
 		
+#if 0
+		printf("RUNNING %s\n", buffer);
+		for (int i = 0; i <  ctx_stack->total_argc + argc; i++) {
+			printf("\t%d %s\n", i, ctx_argv[i]);
+		}
+#endif
+
 		recli_exec(buffer, ctx_stack->total_argc + argc,
 			   ctx_argv, config.envp);
 		recli_load_syntax(&config);
