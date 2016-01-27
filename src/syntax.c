@@ -3157,6 +3157,8 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 		if (a->type == CLI_TYPE_EXACT) {
 			if ((b->type == CLI_TYPE_EXACT) &&
 			    (b->length == 2)) {
+				if (next) syntax_free(c);
+
 				argv[0] = a->first;
 				help_text[0] = b->first;
 				return 1;
