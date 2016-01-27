@@ -3296,6 +3296,8 @@ int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *he
 		 *	FIXME: print out automatic help for built-in data types.
 		 */
 		if (j == help_argc) {
+			if (!*cmds_argv[i]) cmds_argv[i] = "<cr>";
+
 			recli_fprintf(recli_stdout, "%s\r\n", cmds_argv[i]);
 		}
 	}
