@@ -248,9 +248,6 @@ static void ctx_stack_pop(void)
 	ctx_stack->buf[0] = '\0';
 	ctx_stack->argv_buf[0] = '\0';
 	ctx_stack->argv[0] = NULL;
-
-	ctx_stack->max_argc += ctx_stack->argc;
-	ctx_stack->total_argc -= ctx_stack->argc;
 	ctx_stack->argc = 0;
 }
 
