@@ -470,7 +470,7 @@ static void process(int tty, char *line)
 			fprintf(stderr, "%.*s^", (int) strlen(ctx_stack->buf), spaces);
 
 		} else {
-			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c] - ctx_stack->argv_buf), spaces);
+			fprintf(stderr, "%.*s^", (int) (ctx_stack->argv[-c - 1] - ctx_stack->argv_buf), spaces);
 		}
 
 		if (!error) error = "Parse error";
