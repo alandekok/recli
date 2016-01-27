@@ -1298,11 +1298,6 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		a = first;
 
 		/*
-		 *	Help text MUST be at the end of a concatenation string.
-		 */
-		if (a->type == CLI_TYPE_EXACT) assert(a->length == 0);
-
-		/*
 		 *	concat(concat(a,b),c) ==> concat(a,concat(b,c))
 		 */
 		if (a->type == CLI_TYPE_CONCAT) {
@@ -1320,7 +1315,6 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 			syntax_free(first);
 			first = b;
 			next = c;
-
 		}
 
 		SYNTAX_DEBUG_PRINTF(type, "CONCAT", first, next);
