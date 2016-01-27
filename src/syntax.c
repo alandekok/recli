@@ -2378,7 +2378,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 const char **error)
 {
-	int words, rcode;
+	int words, total;
 	cli_syntax_t *a;
 
 	*error = NULL;
@@ -2433,11 +2433,11 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 		argc -= words;
 		argv += words;
-		rcode = words;
+		total = words;
 
 		while (argc > 0) {
 			words = syntax_check(a->first, argc, argv, error);
-			if (words < 0) return words - rcode;
+			if (words < 0) return words - total;
 
 			if (words == 0) break; /* didn't match anything */
 
@@ -2445,9 +2445,9 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 			argc -= words;
 			argv += words;
-			rcode += words;
+			total += words;
 		}
-		return rcode;
+		return total;
 
 	case CLI_TYPE_CONCAT:
 		/*
@@ -2455,29 +2455,40 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 *	anything if it's optional.
 		 */
 		words = syntax_check(a->first, argc, argv, error);
-		if (words < 0) return words;
+		if (words < 0) {
+			return words;
+		}
 
 		if (words > argc) return words;
 
 		argc -= words;
 		argv += words;
-		rcode = words;
+		total = words;
 
 		words = syntax_check(a->next, argc, argv, error);
-		if (words < 0) return words - rcode;
+		if (words < 0) {
+			return words - total;
+		}
 
-		if (words > argc) return rcode + words;
+		if (words > argc) return total + words;
 
-		argc -= words;
-		argv += words;
-		rcode += words;
-		return rcode;
+		total += words;
+		return total;
 
 	case CLI_TYPE_ALTERNATE:
+		total = 0;
 		words = syntax_check(a->first, argc, argv, error);
-		if (words < 0) return syntax_check(a->next, argc, argv, error);
+		if (words >= 0) return words; /* found a match */
 
+		total = syntax_check(a->next, argc, argv, error);
+		if (total >= 0) return total;
+
+		/*
+		 *	Return the longest error.
+		 */
+		if (total < words) return total;
 		return words;
+
 
 	default:
 		break;
