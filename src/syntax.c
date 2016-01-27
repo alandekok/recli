@@ -2481,9 +2481,16 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 	case CLI_TYPE_ALTERNATE:
 		total = 0;
 		words = syntax_check(a->first, argc, argv, error);
-		if (words >= 0) return words; /* found a match */
+		if (words > 0) return words; /* found a match */
+
+		/*
+		 *	We're at the end of the input, and at the end
+		 *	of the optional command.  It's allowed.
+		 */
+		if ((argc == 0) && (words == 0)) return 0;
 
 		total = syntax_check(a->next, argc, argv, error);
+
 		if (total >= 0) return total;
 
 		/*
