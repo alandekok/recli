@@ -2396,6 +2396,9 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 				return 1;
 			}
 
+			*error = "Input does not match required syntax";
+			return -1;
+
 			/*
 			 *	FIXME: have the parser take an error, too!
 			 */
