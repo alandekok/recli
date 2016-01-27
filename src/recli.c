@@ -187,6 +187,11 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 
 	if (argc < 0) goto do_print;
 
+	if (ctx_stack_index > 0) {
+		ctx_stack_t *c = &ctx_stack_array[ctx_stack_index - 1];
+
+		printf("%s - ", c->argv[c->argc - 1]);
+	}
 	syntax_print_context_help(ctx_stack->short_help, argc, argv);
 	syntax_print_context_help_subcommands(ctx_stack->syntax, ctx_stack->short_help, argc, argv);
 
