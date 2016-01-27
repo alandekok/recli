@@ -412,11 +412,11 @@ static void process(int tty, char *line)
 	const char *error;
 	char **argv;
 
-	if (!len) goto done;
+	if (!len) return;
 
 	if (len >= ctx_stack->bufsize) {
 		fprintf(stderr, "line too long\r\n");
-		goto done;
+		return;
 	}
 
 	/*
@@ -428,19 +428,19 @@ static void process(int tty, char *line)
 	argv = ctx_stack->argv;
 
 	argc = str2argv(ctx_stack->argv_buf, len, ctx_stack->max_argc, argv);
-	if (!argc) goto done;
+	if (!argc) return;
 
 	if (argc < 0) {
 		fprintf(stderr, "%s\n", ctx_stack->buf);
 		fprintf(stderr, "%.*s^", -argc, spaces);
 		fprintf(stderr, " Parse error.\n");
-		goto done;
+		return;
 	}
 
 	for (i = 0; builtin_commands[i].name != NULL; i++) {
 		if (strcmp(argv[0], builtin_commands[i].name) == 0) {
 			builtin_commands[i].function(argc - 1, argv + 1);
-			goto done;
+			return;
 		}
 	}
 
@@ -518,7 +518,7 @@ static void process(int tty, char *line)
 		}
 
 		ctx_stack_push(argc);
-		goto done;
+		return;
 	}
 
 	runit = 1;
@@ -552,9 +552,6 @@ add_line:
 		fflush(stdout);
 		fflush(stderr);
 	}
-
-done:
-	free(line);
 }
 
 
@@ -727,6 +724,7 @@ int main(int argc, char **argv)
 
 	while ((line = linenoise(ctx_stack->prompt)) != NULL) {
 		process(tty, line);
+		free(line);
 	}
 
 done:
