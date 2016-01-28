@@ -133,12 +133,22 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 
 	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
+		assert(this->first != NULL);
+		assert(this->next == NULL);
+		assert(syntax_find(this->first) == this->first);
+		
+		hash = fnv_hash_update(this->first, sizeof(this->first),
+				       hash);
+		break;
+
 	case CLI_TYPE_PLUS:
 		assert(this->first != NULL);
 		assert(this->next == NULL);
 		assert(syntax_find(this->first) == this->first);
 		
 		hash = fnv_hash_update(this->first, sizeof(this->first),
+				       hash);
+		hash = fnv_hash_update(&this->min, sizeof(this->min),
 				       hash);
 		break;
 
@@ -2050,6 +2060,20 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 
 		return total + syntax_prefix_words(argc, argv, word, sense, next, NULL);
 
+	case CLI_TYPE_PLUS:
+		/*
+		 *	Count '*' and '+' as equivalent for prefix words, and always
+		 *	show one option.
+		 */
+		matches = syntax_prefix_words(argc, argv, word, sense, this->first, next);
+		argc -= matches;
+		argv += matches;
+		total = matches;
+
+		if (!next) return total;
+
+		return total + syntax_prefix_words(argc, argv, word, sense, next, NULL);
+
 	case CLI_TYPE_CONCAT:
 		a = this->next;
 		if (next) {
@@ -2453,10 +2477,20 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 			argc -= words;
 			argv += words;
 			total = words;
+		} else {
+			total = 0;
+
+			if (!argc) return 0; /* that's OK. */
 		}
 
 		while (argc > 0) {
 			words = syntax_check(a->first, argc, argv, error);
+
+			/*
+			 *	No match on '*' is OK.
+			 */
+			if (a->min == total) return 0;
+
 			if (words < 0) return words - total;
 
 			if (words == 0) break; /* didn't match anything */
@@ -3154,6 +3188,21 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 		argv += matches;
 		help_text += matches;
 		total += matches;
+
+		if (!next) return total;
+
+		return total + syntax_prefix_help(argc, argv, help_text, next, NULL);
+
+	case CLI_TYPE_PLUS:
+		/*
+		 *	Count '*' and '+' as equivalent for prefix words, and always
+		 *	show one option.
+		 */
+		matches = syntax_prefix_help(argc, argv, help_text, this->first, next);
+		argc -= matches;
+		argv += matches;
+		help_text += matches;
+		total = matches;
 
 		if (!next) return total;
 
