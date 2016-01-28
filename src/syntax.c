@@ -1932,7 +1932,7 @@ int syntax_parse(const char *name, cli_syntax_t **out)
 /*
  *	Add callbacks for a data type.
  */
-int syntax_parse_add(const char *name, cli_syntax_parse_t callback)
+int syntax_parse_add(const char *name, recli_datatype_parse_t callback)
 {
 	size_t len;
 	cli_syntax_t *this, find;
@@ -2286,7 +2286,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 
 	case CLI_TYPE_EXACT:
 		if (this->next) { /* call syntax checker */
-			if (!((cli_syntax_parse_t)this->next)(word)) {
+			if (!((recli_datatype_parse_t)this->next)(word, NULL)) {
 				return NULL; /* failed to match */
 			}
 
@@ -2387,7 +2387,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		if (argc == 0) return 1; /* want one more argument */
 
 		if (a->next) { /* call syntax checker */
-			if (((cli_syntax_parse_t)a->next)(argv[0])) {
+			if (((recli_datatype_parse_t)a->next)(argv[0], error)) {
 				return 1;
 			}
 

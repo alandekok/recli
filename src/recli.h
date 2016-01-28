@@ -26,10 +26,10 @@ extern int syntax_merge(cli_syntax_t **phead, char *str);
 extern int syntax_parse_file(const char *filename, cli_syntax_t **);
 extern void syntax_free(cli_syntax_t *);
 
-typedef int (*cli_syntax_parse_t)(const char *);
+typedef ssize_t (*recli_datatype_parse_t)(const char*, const char **);
 
 extern int syntax_parse(const char *buffer, cli_syntax_t **out);
-extern int syntax_parse_add(const char *name, cli_syntax_parse_t callback);
+extern int syntax_parse_add(const char *name, recli_datatype_parse_t callback);
 extern int syntax_check(cli_syntax_t *syntax, int argc, char *argv[],
 			const char **fail);
 extern cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[]);
@@ -42,8 +42,6 @@ extern const char *syntax_show_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help(cli_syntax_t *head, int argc, char *argv[]);
 extern int syntax_print_context_help_subcommands(cli_syntax_t *syntax, cli_syntax_t *help, int argc, char *argv[]);
 extern cli_syntax_t *syntax_skip_prefix(cli_syntax_t *a, int lcp);
-
-typedef int (*recli_datatype_parse_t)(const char*);
 
 typedef struct recli_datatype_t {
 	const char		*name;

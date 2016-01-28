@@ -6,7 +6,7 @@
 #include <limits.h>
 #include "recli.h"
 
-static int parse_boolean(const char *buffer)
+static ssize_t parse_boolean(const char *buffer, UNUSED const char **error)
 {
 	if (strcmp(buffer, "on") == 0) return 1;
 	if (strcmp(buffer, "off") == 0) return 1;
@@ -14,11 +14,10 @@ static int parse_boolean(const char *buffer)
 	if (strcmp(buffer, "1") == 0) return 1;
 	if (strcmp(buffer, "0") == 0) return 1;
 
-
 	return 0;
 }
 
-static int parse_integer(const char *buffer)
+static ssize_t parse_integer(const char *buffer, UNUSED const char **error)
 {
 	long part;
 	char *end;
@@ -32,7 +31,7 @@ static int parse_integer(const char *buffer)
 	return 1;
 }
 
-static int parse_ipaddr(const char *buffer)
+static ssize_t parse_ipaddr(const char *buffer, UNUSED const char **error)
 {
 	char c;
 	int num, parts[4];
@@ -50,7 +49,7 @@ static int parse_ipaddr(const char *buffer)
 	return 1;
 }
 
-static int parse_ipprefix(const char *buffer)
+static ssize_t parse_ipprefix(const char *buffer, UNUSED const char **error)
 {
 	char c;
 	int num, parts[5];
@@ -73,7 +72,7 @@ static int parse_ipprefix(const char *buffer)
 /*
  *	This is broken.
  */
-static int parse_ipv6addr(const char *buffer)
+static ssize_t parse_ipv6addr(const char *buffer, UNUSED const char **error)
 {
 	char c;
 	int num, parts[4];
@@ -91,7 +90,7 @@ static int parse_ipv6addr(const char *buffer)
 	return 1;
 }
 
-static int parse_macaddr(const char *buffer)
+static ssize_t parse_macaddr(const char *buffer, UNUSED const char **error)
 {
 	char c;
 	int num, parts[6];
@@ -110,7 +109,7 @@ static int parse_macaddr(const char *buffer)
 	return 1;
 }
 
-static int parse_string(const char *buffer)
+static ssize_t parse_string(const char *buffer, UNUSED const char **error)
 {
 	if ((*buffer == '"') || (*buffer == '\'') || (*buffer == '`')) {
 		if (strquotelen(buffer) > 0) return 1;
@@ -120,25 +119,25 @@ static int parse_string(const char *buffer)
 	return 1;
 }
 
-static int parse_dqstring(const char *buffer)
+static ssize_t parse_dqstring(const char *buffer, UNUSED const char **error)
 {
 	if (*buffer != '"') return 0;
 
-	return parse_string(buffer);
+	return parse_string(buffer, error);
 }
 
-static int parse_sqstring(const char *buffer)
+static ssize_t parse_sqstring(const char *buffer, UNUSED const char **error)
 {
 	if (*buffer != '\'') return 0;
 
-	return parse_string(buffer);
+	return parse_string(buffer, error);
 }
 
-static int parse_bqstring(const char *buffer)
+static ssize_t parse_bqstring(const char *buffer, UNUSED const char **error)
 {
 	if (*buffer != '`') return 0;
 
-	return parse_string(buffer);
+	return parse_string(buffer, error);
 }
 
 recli_datatype_t recli_datatypes[] = {
