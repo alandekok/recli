@@ -70,6 +70,8 @@ struct cli_syntax_t {
 
 	int refcount;
 	int length;		/* for concatenation nodes */
+
+	int min, max;		/* for '*', '+', and [] */
 };
 
 #define FNV_MAGIC_INIT (0x811c9dc5)
@@ -1502,7 +1504,11 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 			offset++;
 		}
 
-		buffer[0] = '+';
+		if (in->min == 0) {
+			buffer[0] = '*';
+		} else {
+			buffer[0] = '+';
+		}
 		buffer[1] = '\0';
 		outlen++;
 		outlen += offset;
@@ -1786,7 +1792,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			goto next;
 		}
 
-		if ((*p > ' ') && (*p != '-') && (*p < '0') && (*p != '+')) {
+		if ((*p > ' ') && (*p != '-') && (*p < '0') && (*p != '+') && (*p != '*')) {
 			syntax_error(start, "Invalid character");
 			syntax_free(first);
 			return 0;
@@ -1796,7 +1802,7 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			if ((*p == '(') || (*p == '[') || (*p == '|') ||
 			    (*p == '{') || (*p == '}') || (*p == '=') ||
 			    (*p == ')') || (*p == ']') || (*p == ' ') ||
-			    (*p == '+')) {
+			    (*p == '+') || (*p == '*')) {
 				break;
 			}
 			p++;
@@ -1863,13 +1869,15 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 		}
 
 	next:
-		if (*p == '+') {
+		if ((*p == '+') || (*p == '*')) {
 			cli_syntax_t *a;
 
-			p++;
-
 			if (this->type == CLI_TYPE_PLUS) {
-				syntax_error(start, "Unexpected '+'");
+				if (*p == '*') {
+					syntax_error(start, "Unexpected '*'");
+				} else {
+					syntax_error(start, "Unexpected '+'");
+				}
 				syntax_free(this);
 				syntax_free(first);
 				return 0;
@@ -1884,7 +1892,15 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 				return 0;
 			}
 
+			if (*p == '*') {
+				a->min = 0;
+			} else {
+				a->min = 1;
+			}
+
 			this = a;
+			p++;
+			
 		}
 
 		if (!first) {
@@ -2257,7 +2273,11 @@ static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 		break;
 
 	case CLI_TYPE_PLUS:
-		recli_fprintf(recli_stdout, "+");
+		if (this->min == 0) {
+			recli_fprintf(recli_stdout, "*");
+		} else {
+			recli_fprintf(recli_stdout, "+");
+		}
 		break;
 
 	default:
@@ -2422,16 +2442,18 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	case CLI_TYPE_PLUS:
 		/*
-		 *	Has to match at least once.
+		 *	Has to match at least 'min' times.
 		 */
-		words = syntax_check(a->first, argc, argv, error);
-		if (words <= 0) return words;
+		if (a->min == 1) {
+			words = syntax_check(a->first, argc, argv, error);
+			if (words <= 0) return words;
 
-		if (words > argc) return words;
+			if (words > argc) return words;
 
-		argc -= words;
-		argv += words;
-		total = words;
+			argc -= words;
+			argv += words;
+			total = words;
+		}
 
 		while (argc > 0) {
 			words = syntax_check(a->first, argc, argv, error);

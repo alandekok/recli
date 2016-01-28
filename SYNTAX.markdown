@@ -74,6 +74,10 @@ Alternate choices become more useful when you have multiple choices:
 It would be expensive to specify the above example using the "one line
 for each allowed syntax" paradigm.
 
+## Repetition
+
+The standard "+" and "*" can be used to repeat any subset of a syntax.
+
 ## Combination and Nesting
 
 The above examples can be combined, of course:
