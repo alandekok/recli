@@ -150,6 +150,8 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 				       hash);
 		hash = fnv_hash_update(&this->min, sizeof(this->min),
 				       hash);
+		hash = fnv_hash_update(&this->max, sizeof(this->max),
+				       hash);
 		break;
 
 	case CLI_TYPE_ALTERNATE:
@@ -1514,10 +1516,19 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 			offset++;
 		}
 
-		if (in->min == 0) {
-			buffer[0] = '*';
+		if (in->max == 0) {
+			if (in->min == 0) {
+				buffer[0] = '*';
+			} else {
+				buffer[0] = '+';
+			}
 		} else {
-			buffer[0] = '+';
+			if (in->min == in->max) {
+				outlen += snprintf(buffer, len, "{%d}", in->min);
+			} else {
+				outlen += snprintf(buffer, len, "{%d,%d}", in->min, in->max);
+			}
+
 		}
 		buffer[1] = '\0';
 		outlen++;
@@ -2297,10 +2308,18 @@ static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 		break;
 
 	case CLI_TYPE_PLUS:
-		if (this->min == 0) {
-			recli_fprintf(recli_stdout, "*");
+		if (this->max == 0) {
+			if (this->min == 0) {
+				recli_fprintf(recli_stdout, "*");
+			} else {
+				recli_fprintf(recli_stdout, "+");
+			}
 		} else {
-			recli_fprintf(recli_stdout, "+");
+			if (this->min == this->max) {
+				recli_fprintf(recli_stdout, "{%d}", this->min);
+			} else {
+				recli_fprintf(recli_stdout, "{%d,%d}", this->min, this->max);
+			}
 		}
 		break;
 
