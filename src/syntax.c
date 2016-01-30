@@ -46,7 +46,6 @@ typedef enum cli_type_t {
 	CLI_TYPE_INVALID = 0,
 	CLI_TYPE_EXACT,
 	CLI_TYPE_VARARGS,
-	CLI_TYPE_KEY,
 	CLI_TYPE_OPTIONAL,
 	CLI_TYPE_CONCAT,
 	CLI_TYPE_ALTERNATE,
@@ -131,7 +130,6 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 				       hash);
 		break;
 
-	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
 		assert(this->first != NULL);
 		assert(this->next == NULL);
@@ -366,7 +364,6 @@ redo:
 		this = next;
 		goto redo;
 
-	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
 	case CLI_TYPE_PLUS:
 		assert(hash_table[this->hash & (table_size - 1)] == this);
@@ -1287,7 +1284,6 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		}
 		break;
 
-	case CLI_TYPE_KEY:
 	case CLI_TYPE_OPTIONAL:
 	case CLI_TYPE_PLUS:
 		assert(first != NULL);
@@ -1342,7 +1338,6 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 	this = syntax_ref(&find);
 	if (this) {
 		if ((type == CLI_TYPE_CONCAT) ||
-		    (type == CLI_TYPE_KEY) ||
 		    (type == CLI_TYPE_MACRO) ||
 		    (type == CLI_TYPE_ALTERNATE) ||
 		    (type == CLI_TYPE_OPTIONAL)) {
@@ -1476,19 +1471,6 @@ static size_t syntax_sprintf(char *buffer, size_t len,
 		buffer += outlen;
 		len -= outlen;
 		buffer[0] = ']';
-		buffer[1] = '\0';
-		outlen += 2;
-		break;
-
-	case CLI_TYPE_KEY:
-		buffer[0] = '{';
-		buffer++;
-		len--;
-		outlen = syntax_sprintf(buffer, len, in->first,
-					CLI_TYPE_KEY);
-		buffer += outlen;
-		len -= outlen;
-		buffer[0] = '}';
 		buffer[1] = '\0';
 		outlen += 2;
 		break;
@@ -1662,14 +1644,6 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			return 0;
 		}
 
-		if (*p == '}') {
-			if (type == CLI_TYPE_KEY) break;
-
-			syntax_error(start, "Unexpected '}'");
-			syntax_free(first);
-			return 0;
-		}
-
 		if (*p == '[') {
 			cli_syntax_t *a;
 			p++;
@@ -1690,40 +1664,6 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			this = syntax_alloc(CLI_TYPE_OPTIONAL, a, NULL);
 			if (!this) {
 				syntax_error(start, "Failed creating [...]");
-				syntax_free(first);
-				return 0;
-			}
-			goto next;
-		}
-
-		if (*p == '{') {
-			cli_syntax_t *a;
-			p++;
-
-			for (q = p; *q; q++) {
-				if (*q == '}') break;
-				if (*q == '{') {
-					syntax_error(start, "Cannot nest '{'");
-					syntax_free(first);
-					return 0;
-				}
-			}
-
-			rcode = str2syntax(&p, &a, CLI_TYPE_KEY);
-			if (!rcode) {
-				return 0;
-			}
-
-			if (*p != '}') {
-				syntax_error(start, "No matching '}'");
-				syntax_free(first);
-				return 0;
-			}
-
-			p++;
-			this = syntax_alloc(CLI_TYPE_KEY, a, NULL);
-			if (!this) {
-				syntax_error(start, "Failed creating {...}");
 				syntax_free(first);
 				return 0;
 			}
@@ -1855,6 +1795,9 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 			continue;
 		}
 
+		/*
+		 *	Macros
+		 */
 		if (isupper((int) tmp[0])) {
 			cli_syntax_t find;
 
@@ -2044,15 +1987,6 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		argv[0] = this->first;
 		return 1;
 
-	case CLI_TYPE_KEY:
-		matches = syntax_prefix_words(argc, argv, word, sense, this->first, next);
-		argc -= matches;
-		argv += matches;
-
-		if (!next) return matches;
-
-		return matches + syntax_prefix_words(argc, argv, word, sense, next, NULL);
-
 	case CLI_TYPE_OPTIONAL:
 		/*
 		 *	Note first that there's an empty option.
@@ -2177,14 +2111,6 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	case CLI_TYPE_OPTIONAL:
 		if (rcode == CLI_WALK_SKIP) return 1;
 
-	case CLI_TYPE_KEY:
-		WALK(this->first);
-
-		if (inorder && !inorder(ctx, this)) {
-			return 0;
-		}
-		break;
-
 	case CLI_TYPE_CONCAT:
 	case CLI_TYPE_ALTERNATE:
 		WALK(this->first);
@@ -2252,10 +2178,6 @@ static int syntax_print_pre(UNUSED void *ctx, cli_syntax_t *this)
 		recli_fprintf(recli_stdout, "[");
 		break;
 
-	case CLI_TYPE_KEY:
-		recli_fprintf(recli_stdout, "{");
-		break;
-
 	default:
 		break;
 
@@ -2301,10 +2223,6 @@ static int syntax_print_post(UNUSED void *ctx, cli_syntax_t *this)
 
 	case CLI_TYPE_OPTIONAL:
 		recli_fprintf(recli_stdout, "]");
-		break;
-
-	case CLI_TYPE_KEY:
-		recli_fprintf(recli_stdout, "}");
 		break;
 
 	case CLI_TYPE_PLUS:
@@ -2372,11 +2290,6 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 
 		next->refcount++;
 		return syntax_alloc(CLI_TYPE_CONCAT, this, next);
-
-	case CLI_TYPE_KEY:
-		this = syntax_match_word(word, sense, this->first, NULL);
-		if (!this) return NULL; /* failed to match */
-		goto do_concat;
 
 	case CLI_TYPE_OPTIONAL:
 		found = syntax_match_word(word, sense, this->first, next);
@@ -3180,16 +3093,6 @@ static int syntax_prefix_help(int argc, char *argv[], char *help_text[],
 		argv[0] = this->first;
 		help_text[0] = NULL;
 		return 1;
-
-	case CLI_TYPE_KEY:
-		matches = syntax_prefix_help(argc, argv, help_text, this->first, next);
-		argc -= matches;
-		argv += matches;
-		help_text += matches;
-
-		if (!next) return matches;
-
-		return matches + syntax_prefix_help(argc, argv, help_text, next, NULL);
 
 	case CLI_TYPE_OPTIONAL:
 		/*
