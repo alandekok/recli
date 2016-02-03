@@ -122,6 +122,12 @@ static uint32_t syntax_hash(cli_syntax_t *this)
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+		hash = fnv_hash_update(this->first, strlen((char *)this->first),
+				       hash);
+		hash = fnv_hash_update(&this->min, sizeof(this->min),
+				       hash);
+		break;
+
 	case CLI_TYPE_VARARGS:
 		assert(this->next == NULL);
 
@@ -1213,6 +1219,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 {
 	cli_syntax_t find;
 	cli_syntax_t *this, *a, *b, *c;
+	int flags = 0;
 
 	memset(&find, 0, sizeof(find));
 
@@ -1247,7 +1254,10 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 
 
 			p = (char *) first;
-			if (!*p) return 0; /* can't create empty strings */
+			if (!*p) {
+				syntax_error_string = "Cannot create zero-length keyword";
+				return NULL;
+			}
 
 			/*
 			 *	Names must begin with a letter.
@@ -1268,18 +1278,40 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 					uppercase = 1;
 				}
 
+				if (p[0] == '/') {
+					if ((p[1] == 'i') && !p[2]) {
+						flags = 1;
+						*p = '\0';
+						break;
+					}
+					syntax_error_string = "Unknown keyword modifier";
+					return NULL;
+				}
+
 				p++;
 			}
 
 			if (uppercase) {
-				if (lowercase) return 0; /* mixed case is not allowed */
+				if (lowercase) {
+					syntax_error_string = "Mixed case key words are not allowed";
+					return NULL;
+				}
 
-				if (type == CLI_TYPE_EXACT) return 0; /* keywords must be lowercase */
+				if (type == CLI_TYPE_EXACT) {
+					syntax_error_string = "Key words must be lowercase";
+					return NULL;
+				}
 
 			} else {
-				if (!lowercase) return 0; /* must have some letters in it */
+				if (!lowercase) {
+					syntax_error_string = "No letters found in the keyword";
+					return NULL;
+				}
 
-				if (type == CLI_TYPE_MACRO) return 0; /* macros must be uppercase */
+				if (type == CLI_TYPE_MACRO) {
+					syntax_error_string = "Macro names must be upper case";
+					return NULL;
+				}
 			}
 		}
 		break;
@@ -1334,6 +1366,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 	find.type = type;
 	find.first = first;
 	find.next = next;
+	find.min = flags;
 
 	this = syntax_ref(&find);
 	if (this) {
@@ -1405,6 +1438,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 
 		this->first = this + 1;
 		memcpy(this->first, first, len + 1);
+		this->min = flags;
 		break;
 
 	}
@@ -1825,6 +1859,9 @@ static int str2syntax(const char **buffer, cli_syntax_t **out, cli_type_t type)
 
 		assert(*tmp != '\0');
 
+		/*
+		 *	Check for case insensitivity
+		 */
 		this = syntax_alloc(CLI_TYPE_EXACT, tmp, NULL);
 		if (!this) {
 			syntax_error(start, "Failed creating word");
@@ -1980,7 +2017,11 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		if (sense == CLI_MATCH_PREFIX) {
 			if (!word) return 0;
 
-			if (strncmp((char *) this->first, word, strlen(word)) != 0) return 0;
+			if (this->min == 1) {
+				if (strncasecmp((char *) this->first, word, strlen(word)) != 0) return 0;
+			} else {
+				if (strncmp((char *) this->first, word, strlen(word)) != 0) return 0;
+			}
 		}
 
 	case CLI_TYPE_VARARGS:
@@ -2272,11 +2313,21 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 			}
 
 		} else if (sense == CLI_MATCH_EXACT) {
-			if (strcmp((char *)this->first, word) != 0) {
+			if (this->min == 1) {
+				if (strcasecmp((char *)this->first, word) != 0) {
+					return NULL;
+				}
+
+			} else if (strcmp((char *)this->first, word) != 0) {
 				return NULL;
 			}
 		} else {
-			if (strncmp((char *)this->first, word, strlen(word)) != 0) {
+			if (this->min == 1) {
+				if (strncasecmp((char *)this->first, word, strlen(word)) != 0) {
+					return NULL;
+				}
+
+			} else if (strncmp((char *)this->first, word, strlen(word)) != 0) {
 				return NULL;
 			}
 		}
