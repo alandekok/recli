@@ -24,7 +24,7 @@ fi
 for exe in $(find ${RECLI_DIR}/bin -type f -perm +1 | egrep -v '~')
 do
   cmd=$(echo $exe | sed "s,${RECLI_DIR}/bin/,,g;s,//,/,g;s,^DEFAULT\$,,;s,/, ,g")
-  $exe --config syntax | sed "s/^/$cmd /" >> ${RECLI_DIR}/cache/syntax.txt.$$
+  $exe --config syntax | sed "s,^,$cmd ,;s,$cmd /,$cmd/," >> ${RECLI_DIR}/cache/syntax.txt.$$
 done
 
 #
