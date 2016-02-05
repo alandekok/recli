@@ -54,6 +54,8 @@ typedef enum cli_type_t {
 	CLI_TYPE_FORCE_EXACT   	/* fake node */
 } cli_type_t;
 
+#define FLAG_CASE_INSENSITIVE (1 << 0)
+
 /*
  *	Define this to get debugging about some of the operations it's
  *	doing.
@@ -1280,7 +1282,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 
 				if (p[0] == '/') {
 					if ((p[1] == 'i') && !p[2]) {
-						flags = 1;
+						flags = FLAG_CASE_INSENSITIVE;
 						*p = '\0';
 						break;
 					}
@@ -2017,7 +2019,7 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 		if (sense == CLI_MATCH_PREFIX) {
 			if (!word) return 0;
 
-			if (this->min == 1) {
+			if ((this->min & FLAG_CASE_INSENSITIVE) != 0) {
 				if (strncasecmp((char *) this->first, word, strlen(word)) != 0) return 0;
 			} else {
 				if (strncmp((char *) this->first, word, strlen(word)) != 0) return 0;
@@ -2313,7 +2315,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 			}
 
 		} else if (sense == CLI_MATCH_EXACT) {
-			if (this->min == 1) {
+			if ((this->min & FLAG_CASE_INSENSITIVE) != 0) {
 				if (strcasecmp((char *)this->first, word) != 0) {
 					return NULL;
 				}
@@ -2322,7 +2324,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 				return NULL;
 			}
 		} else {
-			if (this->min == 1) {
+			if ((this->min & FLAG_CASE_INSENSITIVE) != 0) {
 				if (strncasecmp((char *)this->first, word, strlen(word)) != 0) {
 					return NULL;
 				}
