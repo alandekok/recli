@@ -345,7 +345,7 @@ static void builtin_help(int argc, char **argv)
 		return;
 	}
 
-	rcode = syntax_check(ctx_stack->syntax, argc, argv, &error);
+	rcode = syntax_check(ctx_stack->syntax, argc, argv, &error, NULL);
 	if (rcode < 0) {
 		if (!error) {
 			fprintf(stderr, "Invalid input\n");
@@ -413,6 +413,7 @@ static void process(int tty, char *line)
 {
 	int i, c, argc;
 	int runit = 1;
+	int needs_tty = 0;
 	size_t len = strlen(line);
 	const char *error;
 	char **argv;
@@ -454,7 +455,7 @@ static void process(int tty, char *line)
 	 *	c == argc, parsed it completely
 	 *	c > argc, add new context
 	 */
-	c = syntax_check(ctx_stack->syntax, argc, argv, &error);
+	c = syntax_check(ctx_stack->syntax, argc, argv, &error, &needs_tty);
 
 	if (c < 0) {
 		/*

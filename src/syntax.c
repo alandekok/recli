@@ -54,7 +54,9 @@ typedef enum cli_type_t {
 	CLI_TYPE_FORCE_EXACT   	/* fake node */
 } cli_type_t;
 
-#define FLAG_CASE_INSENSITIVE (1 << 0)
+#define FLAG_NEEDS_TTY	      (1 << 0)
+#define FLAG_CASE_INSENSITIVE (1 << 1)
+#define FLAGS_EXPORT		(FLAG_NEEDS_TTY)
 
 /*
  *	Define this to get debugging about some of the operations it's
@@ -1286,6 +1288,13 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 						*p = '\0';
 						break;
 					}
+
+					if ((p[1] == 't') && !p[2]) {
+						flags = FLAG_NEEDS_TTY;
+						*p = '\0';
+						break;
+					}
+
 					syntax_error_string = "Unknown keyword modifier";
 					return NULL;
 				}
@@ -2399,7 +2408,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
  *	i.e. argc == 0, but we still have nodes to match.
  */
 int syntax_check(cli_syntax_t *head, int argc, char *argv[],
-		 const char **error)
+		 const char **error, int *flags)
 {
 	int words, total;
 	cli_syntax_t *a;
@@ -2427,12 +2436,14 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 			 *	FIXME: have the parser take an error, too!
 			 */
 
-		} else if ((a->min & FLAGS_CASE_INSENSITIVE) != 0) {
+		} else if ((a->min & FLAG_CASE_INSENSITIVE) != 0) {
 			if (strcasecmp((char *)a->first, argv[0]) == 0) {
+				if (flags) *flags |= a->min & FLAGS_EXPORT;
 				return 1;
 			}
 
 		} else if (strcmp((char *)a->first, argv[0]) == 0) {
+			if (flags) *flags |= a->min & FLAGS_EXPORT;
 			return 1;
 		}
 
@@ -2450,7 +2461,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		/*
 		 *	If it didn't match, we return "no words for us".
 		 */
-		words = syntax_check(a->first, argc, argv, error);
+		words = syntax_check(a->first, argc, argv, error, flags);
 		if (words < 0) return 0;
 		return words;
 
@@ -2459,7 +2470,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 *	Has to match at least 'min' times.
 		 */
 		if (a->min == 1) {
-			words = syntax_check(a->first, argc, argv, error);
+			words = syntax_check(a->first, argc, argv, error, flags);
 			if (words <= 0) return words;
 
 			if (words > argc) return words;
@@ -2474,7 +2485,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		}
 
 		while (argc > 0) {
-			words = syntax_check(a->first, argc, argv, error);
+			words = syntax_check(a->first, argc, argv, error, flags);
 
 			/*
 			 *	No match on '*' is OK.
@@ -2498,7 +2509,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 *	Check first entry, which might not match
 		 *	anything if it's optional.
 		 */
-		words = syntax_check(a->first, argc, argv, error);
+		words = syntax_check(a->first, argc, argv, error, flags);
 		if (words < 0) {
 			return words;
 		}
@@ -2509,7 +2520,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		argv += words;
 		total = words;
 
-		words = syntax_check(a->next, argc, argv, error);
+		words = syntax_check(a->next, argc, argv, error, flags);
 		if (words < 0) {
 			return words - total;
 		}
@@ -2521,7 +2532,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 
 	case CLI_TYPE_ALTERNATE:
 		total = 0;
-		words = syntax_check(a->first, argc, argv, &alt_error);
+		words = syntax_check(a->first, argc, argv, &alt_error, flags);
 		if (words > 0) return words; /* found a match */
 
 		/*
@@ -2530,7 +2541,7 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		 */
 		if ((argc == 0) && (words == 0)) return 0;
 
-		total = syntax_check(a->next, argc, argv, error);
+		total = syntax_check(a->next, argc, argv, error, flags);
 
 		if (total >= 0) return total;
 

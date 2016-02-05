@@ -31,7 +31,7 @@ typedef ssize_t (*recli_datatype_parse_t)(const char*, const char **);
 extern int syntax_parse(const char *buffer, cli_syntax_t **out);
 extern int syntax_parse_add(const char *name, recli_datatype_parse_t callback);
 extern int syntax_check(cli_syntax_t *syntax, int argc, char *argv[],
-			const char **fail);
+			const char **fail, int *flags);
 extern cli_syntax_t *syntax_match_max(cli_syntax_t *head, int argc, char *argv[]);
 extern void syntax_printf(const cli_syntax_t *syntax);
 extern void syntax_print_lines(const cli_syntax_t *this);
