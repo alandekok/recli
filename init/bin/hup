@@ -11,4 +11,4 @@ then
    exit 1
 fi
 
-echo "Doing HUP of $*"
+echo "Doing HUP of $@"
