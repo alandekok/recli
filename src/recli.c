@@ -174,7 +174,7 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 	 */
 	if (in_string) return 0;
 
-	printf("?\r\n");
+	recli_printf(recli_stdout, "?\r\n");
 
 	if (!ctx_stack->short_help) {
 	do_print:
@@ -190,7 +190,7 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 	if (ctx_stack_index > 0) {
 		ctx_stack_t *c = &ctx_stack_array[ctx_stack_index - 1];
 
-		printf("%s - ", c->argv[c->argc - 1]);
+		recli_fprintf(recli_stdout, "%s - ", c->argv[c->argc - 1]);
 	}
 	syntax_print_context_help(ctx_stack->short_help, argc, argv);
 	syntax_print_context_help_subcommands(ctx_stack->syntax, ctx_stack->short_help, argc, argv);
@@ -390,7 +390,8 @@ static void builtin_exit(UNUSED int argc, UNUSED char *argv[])
 	}
 
 	ctx_stack_pop();
-	printf("%s\n", ctx_line_buf);
+
+	recli_fprintf(recli_stdout, "%s\n", ctx_line_buf);
 }
 
 static void builtin_quit(UNUSED int argc, UNUSED char *argv[])
