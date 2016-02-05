@@ -67,7 +67,7 @@ The `show` command is a wrapper which looks for programs in the
 about the plugins.  Instead, it just blindly executes programs from
 the `bin` directory.
 
-By placing programs in he `plugins` directory, the `bin` directory
+By placing programs in the `plugins` directory, the `bin` directory
 does not have to be modified when plugins are added.  In addition, the
 plugins do not each have to begin their hierarchy with a `show`
 directory.  The `plugins/README.md` file explains these concepts in
