@@ -67,7 +67,7 @@ extern int recli_bootstrap(recli_config_t *config);
 int recli_load_syntax(recli_config_t *config);
 int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 		      char *const envp[]);
-extern int recli_exec(const char *rundir, int argc, char *argv[],
+extern int recli_exec(const char *rundir, int interactive, int argc, char *argv[],
 		      char *const envp[]);
 
 #ifdef __linux__

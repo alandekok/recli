@@ -208,7 +208,7 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 	p = strchr(argv[0], '/');
 	if (p) argv[0] = p + 1;
 
-	rcode = recli_exec(dir, 3, argv, envp);
+	rcode = recli_exec(dir, 0, 3, argv, envp);
 
 	recli_fprintf = buf_out.old_fprintf;
 	recli_stdout = buf_out.old_ctx;
@@ -396,8 +396,7 @@ static void nonblock(int fd)
 #endif
 }
 
-
-int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
+int recli_exec(const char *rundir, int interactive, int argc, char *argv[], char *const envp[])
 {
 	int index = 0;
 	int status;
@@ -409,7 +408,7 @@ int recli_exec(const char *rundir, int argc, char *argv[], char *const envp[])
 
 	if (!rundir || (argc == 0)) return 0;
 
-	out = snprintf(buffer, sizeof(buffer), "%s/", rundir);
+	out = snprintf(buffer, sizeof(buffer), "%s", rundir);
 
 	if (stat(buffer, &sbuf) < 0) {
 		recli_fprintf(recli_stderr, "Error reading '%s': %s\n",
@@ -449,47 +448,51 @@ run:
 	memcpy(&my_argv[1], &argv[index], sizeof(argv[0]) * (argc - index));
 	my_argv[argc - index + 1] = NULL;
 
-	if (pipe(pd) != 0) {
-		recli_fprintf(recli_stderr, "Failed opening stdout pipe: %s\n",
-			      strerror(errno));
-		return -1;
-	}
+	if (!interactive) {
+		if (pipe(pd) != 0) {
+			recli_fprintf(recli_stderr, "Failed opening stdout pipe: %s\n",
+				      strerror(errno));
+			return -1;
+		}
 
-	if (pipe(epd) != 0) {
-		close(pd[0]);
-		close(pd[1]);
-		recli_fprintf(recli_stderr, "Failed opening stderr pipe: %s\n",
-			      strerror(errno));
-		return -1;
+		if (pipe(epd) != 0) {
+			close(pd[0]);
+			close(pd[1]);
+			recli_fprintf(recli_stderr, "Failed opening stderr pipe: %s\n",
+				      strerror(errno));
+			return -1;
+		}
 	}
 
 	child_pid = fork();
 	if (child_pid == 0) {		/* child */
-		int devnull;
+		if (!interactive) {
+			int devnull;
 
-		devnull = open("/dev/null", O_RDWR);
-		if (devnull < 0) {
-			recli_fprintf(recli_stderr, "Failed opening /dev/null: %s\n",
-				      strerror(errno));
-			exit(1);
+			devnull = open("/dev/null", O_RDWR);
+			if (devnull < 0) {
+				recli_fprintf(recli_stderr, "Failed opening /dev/null: %s\n",
+					      strerror(errno));
+				exit(1);
+			}
+			dup2(devnull, STDIN_FILENO);
+
+			close(epd[0]);	/* reading FD */
+			if (dup2(epd[1], STDERR_FILENO) != STDERR_FILENO) {
+				recli_fprintf(recli_stderr, "Failed duping stderr: %s\n",
+					      strerror(errno));
+				exit(1);
+			}
+
+			close(pd[0]);	/* reading FD */
+			if (dup2(pd[1], STDOUT_FILENO) != STDOUT_FILENO) {
+				recli_fprintf(recli_stderr, "Failed duping stdout: %s\n",
+					      strerror(errno));
+				exit(1);
+			}
+
+			close(devnull);
 		}
-		dup2(devnull, STDIN_FILENO);
-
-		close(epd[0]);	/* reading FD */
-		if (dup2(epd[1], STDERR_FILENO) != STDERR_FILENO) {
-			recli_fprintf(recli_stderr, "Failed duping stderr: %s\n",
-				      strerror(errno));
-			exit(1);
-		}
-
-		close(pd[0]);	/* reading FD */
-		if (dup2(pd[1], STDOUT_FILENO) != STDOUT_FILENO) {
-			recli_fprintf(recli_stderr, "Failed duping stdout: %s\n",
-				      strerror(errno));
-			exit(1);
-		}
-
-		close(devnull);
 
 		/*
 		 *	FIXME: closefrom(3)
@@ -505,82 +508,88 @@ run:
 		exit(1);	/* if exec faild, exit. */
 	}
 
-	assert(pd[1] >= 0);
-	assert(epd[1] >= 0);
-	close(pd[1]);
-	close(epd[1]);
+	if (!interactive) {
+		assert(pd[1] >= 0);
+		assert(epd[1] >= 0);
+		close(pd[1]);
+		close(epd[1]);
+	}
 
 	if (child_pid < 0) {
-		assert(pd[0] >= 0);
-		assert(epd[0] >= 0);
-		close(pd[0]);
-		close(epd[0]);
+		if (!interactive) {
+			assert(pd[0] >= 0);
+			assert(epd[0] >= 0);
+			close(pd[0]);
+			close(epd[0]);
+		}
 
 		recli_fprintf(recli_stderr, "Failed forking program: %s\n",
 			      strerror(errno));
 		return -1;
 	}
 
-	nonblock(pd[0]);
-	nonblock(epd[0]);
-      
-	/*
-	 *	Read from both pipes, printing one to stdout, and the
-	 *	other to stderr.
-	 */
-	while ((pd[0] >= 0) && (epd[0] >= 0)) {
-		int maxfd;
-		ssize_t num;
-		fd_set fds;
+	if (!interactive) {
+		nonblock(pd[0]);
+		nonblock(epd[0]);
 
-		FD_ZERO(&fds);
-		if (pd[0] >= 0) FD_SET(pd[0], &fds);
-		if (pd[0] >= 0) FD_SET(epd[0], &fds);
+		/*
+		 *	Read from both pipes, printing one to stdout, and the
+		 *	other to stderr.
+		 */
+		while ((pd[0] >= 0) && (epd[0] >= 0)) {
+			int maxfd;
+			ssize_t num;
+			fd_set fds;
 
-		maxfd = pd[0];
-		if (maxfd < epd[0]) maxfd = epd[0];
-		maxfd++;
+			FD_ZERO(&fds);
+			if (pd[0] >= 0) FD_SET(pd[0], &fds);
+			if (pd[0] >= 0) FD_SET(epd[0], &fds);
 
-		num = select(maxfd,  &fds, NULL, NULL, NULL);
-		if (num == 0) break;
-		if (num < 0) {
-			if (errno == EINTR) continue;
-			break;
-		}
+			maxfd = pd[0];
+			if (maxfd < epd[0]) maxfd = epd[0];
+			maxfd++;
 
-		if ((pd[0] >= 0) && FD_ISSET(pd[0], &fds)) {
-			num = read(pd[0], buffer, sizeof(buffer) - 1);
-			if (num == 0) {
-			close_stdout:
-				assert(pd[0] >= 0);
-				close(pd[0]);
-				pd[0] = -1;
-
-			} else if (num < 0) {
-				if (errno != EINTR) goto close_stdout;
-				/* else ignore it */
-
-			} else {
-				buffer[num] = '\0';
-				recli_fprintf(recli_stdout, "%s", buffer);
+			num = select(maxfd,  &fds, NULL, NULL, NULL);
+			if (num == 0) break;
+			if (num < 0) {
+				if (errno == EINTR) continue;
+				break;
 			}
-		}
 
-		if ((epd[0] >= 0) && FD_ISSET(epd[0], &fds)) {
-			num = read(epd[0], buffer, sizeof(buffer) - 1);
-			if (num == 0) {
-			close_stderr:
-				assert(epd[0] >= 0);
-				close(epd[0]);
-				epd[0] = -1;
+			if ((pd[0] >= 0) && FD_ISSET(pd[0], &fds)) {
+				num = read(pd[0], buffer, sizeof(buffer) - 1);
+				if (num == 0) {
+				close_stdout:
+					assert(pd[0] >= 0);
+					close(pd[0]);
+					pd[0] = -1;
 
-			} else if (num < 0) {
-				if (errno != EINTR) goto close_stderr;
-				/* else ignore it */
+				} else if (num < 0) {
+					if (errno != EINTR) goto close_stdout;
+					/* else ignore it */
 
-			} else {
-				buffer[num] = '\0';
-				recli_fprintf(recli_stderr, "%s", buffer);
+				} else {
+					buffer[num] = '\0';
+					recli_fprintf(recli_stdout, "%s", buffer);
+				}
+			}
+
+			if ((epd[0] >= 0) && FD_ISSET(epd[0], &fds)) {
+				num = read(epd[0], buffer, sizeof(buffer) - 1);
+				if (num == 0) {
+				close_stderr:
+					assert(epd[0] >= 0);
+					close(epd[0]);
+					epd[0] = -1;
+
+				} else if (num < 0) {
+					if (errno != EINTR) goto close_stderr;
+					/* else ignore it */
+
+				} else {
+					buffer[num] = '\0';
+					recli_fprintf(recli_stderr, "%s", buffer);
+				}
 			}
 		}
 	}
@@ -593,8 +602,10 @@ run:
 		index = 0;
 	}
 
-	if (pd[0] >= 0) close(pd[0]);
-	if (pd[0] >= 0)  close(epd[0]);
+	if (!interactive) {
+		if (pd[0] >= 0) close(pd[0]);
+		if (pd[0] >= 0)  close(epd[0]);
+	}
 
 	return index;
 }

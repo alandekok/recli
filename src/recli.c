@@ -551,7 +551,7 @@ add_line:
 		}
 #endif
 
-		recli_exec(buffer, ctx_stack->total_argc + argc,
+		recli_exec(buffer, 0, ctx_stack->total_argc + argc,
 			   ctx_argv, config.envp);
 		recli_load_syntax(&config);
 		fflush(stdout);
