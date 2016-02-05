@@ -2427,6 +2427,11 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 			 *	FIXME: have the parser take an error, too!
 			 */
 
+		} else if ((a->min & FLAGS_CASE_INSENSITIVE) != 0) {
+			if (strcasecmp((char *)a->first, argv[0]) == 0) {
+				return 1;
+			}
+
 		} else if (strcmp((char *)a->first, argv[0]) == 0) {
 			return 1;
 		}
