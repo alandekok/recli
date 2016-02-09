@@ -81,6 +81,22 @@ static int load_envp(const char *dir, recli_config_t *config)
 
 		if (p == buffer) continue;
 
+		/*
+		 *	Pass some environment variables through.
+		 */
+		for (p = buffer; *p && *p != '='; p++) {
+			/* nothing */
+		}
+
+		if ((p[0] == '=') && (p[1] == '$')) {
+			char const *v;
+
+			v = getenv(p + 2);
+			if (!v) continue;
+
+			strlcpy(p + 1, v, sizeof(buffer) - 1 - (p - buffer));
+		}
+
 		config->envp[argc++] = strdup(buffer);
 		if (argc >= 127) return -1;
 	}
