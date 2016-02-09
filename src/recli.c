@@ -174,7 +174,7 @@ static int short_help(const char *line, size_t len, UNUSED char c)
 	 */
 	if (in_string) return 0;
 
-	recli_printf(recli_stdout, "?\r\n");
+	recli_fprintf(recli_stdout, "?\r\n");
 
 	if (!ctx_stack->short_help) {
 	do_print:

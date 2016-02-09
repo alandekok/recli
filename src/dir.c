@@ -402,7 +402,7 @@ int recli_exec(const char *rundir, int interactive, int argc, char *argv[], char
 	int status;
 	size_t out;
 	int pd[2], epd[2];
-	char *p, *q, buffer[8192];	
+	char *p, *q, buffer[1024];	
 	struct stat sbuf;
 	char *my_argv[256];
 
