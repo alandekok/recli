@@ -17,6 +17,14 @@ number of configuration files in that directory:
 
   The format of the `ENV` file is "VARIABLE=VALUE", as printed by `printenv`.  Blank lines are ignored.  Comments are not allowed.
 
+  As a special case, some variables can be passed through from the
+  users environment.  This is most useful for things like
+  `SSH_AUTH_SOCK`.  You can set
+
+    SSH_AUTH_SOCK=$SSH_AUTH_SOCK
+
+  and the variable will be passed through from the environment.
+
 * `help.md`
   
   The help text is loaded from this file.  See HELP.markdown
