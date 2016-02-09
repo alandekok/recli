@@ -7,6 +7,7 @@ then
   B=`basename "$0"`
   abspath="`cd \"$D\" 2>/dev/null && pwd || echo \"$D\"`/$B"
   RECLI_DIR=$(echo $abspath | sed 's,/[^/]*$,,g;s,/[^/]*$,,g')
+  export RECLI_DIR
 fi
 
 if [ "$1" = "--config" ]
