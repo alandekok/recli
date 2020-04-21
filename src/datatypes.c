@@ -31,24 +31,6 @@ static ssize_t parse_integer(const char *buffer, UNUSED const char **error)
 	return 1;
 }
 
-static ssize_t parse_ipaddr(const char *buffer, UNUSED const char **error)
-{
-	char c;
-	int num, parts[4];
-
-	num = sscanf(buffer, "%d.%d.%d.%d%c", &parts[0], &parts[1],
-		     &parts[2], &parts[3], &c);
-	if (num != 4) {
-		return 0;
-	}
-	for (num = 0; num < 4; num++) {
-		if (parts[num] < 0) return 0;
-		if (parts[num] > 255) return 0;
-	}
-
-	return 1;
-}
-
 static ssize_t parse_ipprefix(const char *buffer, UNUSED const char **error)
 {
 	char c;
@@ -63,8 +45,26 @@ static ssize_t parse_ipprefix(const char *buffer, UNUSED const char **error)
 		if (parts[num] < 0) return 0;
 		if (parts[num] > 255) return 0;
 	}
-	
+
 	if ((parts[4] < 0) || (parts[4] > 32)) return 0;
+
+	return 1;
+}
+
+static ssize_t parse_ipv4addr(const char *buffer, UNUSED const char **error)
+{
+	char c;
+	int num, parts[4];
+
+	num = sscanf(buffer, "%d.%d.%d.%d%c", &parts[0], &parts[1],
+		     &parts[2], &parts[3], &c);
+	if (num != 4) {
+		return 0;
+	}
+	for (num = 0; num < 4; num++) {
+		if (parts[num] < 0) return 0;
+		if (parts[num] > 255) return 0;
+	}
 
 	return 1;
 }
@@ -89,6 +89,15 @@ static ssize_t parse_ipv6addr(const char *buffer, UNUSED const char **error)
 
 	return 1;
 }
+
+
+static ssize_t parse_ipaddr(const char *buffer, const char **error)
+{
+	if (parse_ipv4addr(buffer, error) == 1) return 1;
+
+	return parse_ipv6addr(buffer, error);
+}
+
 
 static ssize_t parse_macaddr(const char *buffer, UNUSED const char **error)
 {
@@ -145,6 +154,7 @@ recli_datatype_t recli_datatypes[] = {
 	{ "INTEGER", parse_integer },
 	{ "IPADDR", parse_ipaddr },
 	{ "IPPREFIX", parse_ipprefix },
+	{ "IPV4ADDR", parse_ipv4addr },
 	{ "IPV6ADDR", parse_ipv6addr },
 	{ "MACADDR", parse_macaddr },
 	{ "STRING", parse_string },
