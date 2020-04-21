@@ -38,7 +38,7 @@ static ssize_t parse_integer(const char *buffer, const char **error)
 	return 1;
 }
 
-static ssize_t parse_ipprefix(const char *buffer, UNUSED const char **error)
+static ssize_t parse_ipv4prefix(const char *buffer, UNUSED const char **error)
 {
 	char c;
 	int num, parts[5];
@@ -49,11 +49,20 @@ static ssize_t parse_ipprefix(const char *buffer, UNUSED const char **error)
 		return 0;
 	}
 	for (num = 0; num < 4; num++) {
-		if (parts[num] < 0) return 0;
-		if (parts[num] > 255) return 0;
+		if (parts[num] < 0) {
+			*error = "Invalid address";
+			return 0;
+		}
+		if (parts[num] > 255) {
+			*error = "Invalid address";
+			return 0;
+		}
 	}
 
-	if ((parts[4] < 0) || (parts[4] > 32)) return 0;
+	if ((parts[4] < 0) || (parts[4] > 32)) {
+		*error = "Invalid prefix length";
+		return 0;
+	}
 
 	return 1;
 }
@@ -96,6 +105,46 @@ static ssize_t parse_ipv6addr(const char *buffer, const char **error)
 	return 1;
 }
 
+
+static ssize_t parse_ipv6prefix(const char *buffer, UNUSED const char **error)
+{
+	char const *p;
+	long prefix;
+	char *end;
+
+	for (p = buffer; *p; p++) {
+		if (*p == ':') continue;
+		if ((*p >= '0') && (*p <= '9')) continue;
+		if ((*p >= 'a') && (*p <= 'f')) continue;
+		if ((*p >= 'A') && (*p <= 'F')) continue;
+
+		if (*p == '/') break;
+
+		*error = "Invalid character in IPv6 address";
+		return 0;
+	}
+
+	p++;
+	
+	prefix = strtol(p, &end, 10);
+	if ((prefix < 0) || (prefix > 128)) {
+		*error = "Invalid prefix length";
+		return 0;
+	}
+	
+
+	return 1;
+}
+
+static ssize_t parse_ipprefix(const char *buffer, const char **error)
+{
+	if (parse_ipv4prefix(buffer, error) == 1) return 1;
+
+	if (parse_ipv6prefix(buffer, error) == 1) return 1;
+
+	*error = "Invalid syntax for IP prefix";
+	return 0;
+}
 
 static ssize_t parse_ipaddr(const char *buffer, const char **error)
 {
@@ -241,7 +290,9 @@ recli_datatype_t recli_datatypes[] = {
 	{ "IPADDR", parse_ipaddr },
 	{ "IPPREFIX", parse_ipprefix },
 	{ "IPV4ADDR", parse_ipv4addr },
+	{ "IPV4PREFIX", parse_ipv4prefix },
 	{ "IPV6ADDR", parse_ipv6addr },
+	{ "IPV6PREFIX", parse_ipv6prefix },
 	{ "MACADDR", parse_macaddr },
 	{ "STRING", parse_string },
 	{ "DQSTRING", parse_dqstring },
