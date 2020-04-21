@@ -1,0 +1,6 @@
+host foo.com
+host a.b.c.d.org
+host xn-foo.com
+host fj1@@@
+host .
+host .foo.bar

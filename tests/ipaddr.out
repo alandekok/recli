@@ -1,8 +1,8 @@
 ip -3.3
-   ^ Parse error.
+   ^ Invalid syntax for IP address.
 ip xyz
-   ^ Parse error.
+   ^ Invalid syntax for IP address.
 ip 333.0.1.2
-   ^ Parse error.
+   ^ Invalid syntax for IP address.
 ip 1.2.3.3a
-   ^ Parse error.
+   ^ Invalid syntax for IP address.

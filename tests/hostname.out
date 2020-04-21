@@ -1,0 +1,4 @@
+host fj1@@@
+     ^ Invalid character in host name.
+host .foo.bar
+     ^ Too many '.'.

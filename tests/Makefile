@@ -1,4 +1,4 @@
-TESTS	:= ipaddr integer string fish aorb maybea comments many merge prefix \
+TESTS	:= hostname ipaddr ipv4addr ipv6addr integer string fish aorb maybea comments many merge prefix \
 		varargs
 
 all: ../src/recli

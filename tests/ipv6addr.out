@@ -1,0 +1,4 @@
+ipv6 -3.3
+     ^ Invalid character in IPv6 address.
+ipv6 xyz
+     ^ Invalid character in IPv6 address.

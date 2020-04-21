@@ -1,6 +1,6 @@
 int -2.3
-    ^ Parse error.
+    ^ Unexpected text after decimal integer.
 int 0x44
-    ^ Parse error.
+    ^ Unexpected text after decimal integer.
 int "hello"
-    ^ Parse error.
+    ^ Unexpected text after decimal integer.

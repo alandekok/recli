@@ -2425,11 +2425,15 @@ int syntax_check(cli_syntax_t *head, int argc, char *argv[],
 		if (argc == 0) return 1; /* want one more argument */
 
 		if (a->next) { /* call syntax checker */
+			/*
+			 *	Call registered data type such as IPADDR, etc.
+			 */
+			*error = NULL;
 			if (((recli_datatype_parse_t)a->next)(argv[0], error)) {
 				return 1;
 			}
 
-			*error = "Input does not match required syntax";
+			if (!*error) *error = "Input does not match required syntax";
 			return -1;
 
 			/*

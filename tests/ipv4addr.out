@@ -1,0 +1,8 @@
+ipv4 -3.3
+     ^ Input does not match required syntax.
+ipv4 xyz
+     ^ Input does not match required syntax.
+ipv4 333.0.1.2
+     ^ Input does not match required syntax.
+ipv4 1.2.3.3a
+     ^ Input does not match required syntax.
