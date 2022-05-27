@@ -39,3 +39,10 @@ anything else with the input unless you tell it to.
 
  * Configuration files can be placed in a subdirectory.  See [config/README.markdown](config/README.markdown)
 
+## Usage
+
+```
+make
+./recli
+```
+
