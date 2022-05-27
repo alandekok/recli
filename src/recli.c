@@ -15,8 +15,15 @@
 static int in_string = 0;
 static size_t string_start = 0;
 
+#define XSTRINGIFY(x) #x
+#define STRINGIFY(x) XSTRINGIFY(x)
+
+#ifndef CONFIG_DIR
+#define CONFIG_DIR "config"
+#endif
+
 static recli_config_t config = {
-	.dir = "config",
+	.dir = CONFIG_DIR,
 	.prompt = NULL,
 	.banner = NULL,
 	.syntax = NULL,
@@ -561,6 +568,17 @@ add_line:
 	}
 }
 
+static void usage(char const *name, int rcode)
+{
+	FILE *out = stderr;
+
+	if (rcode == 0) out = stdout;
+
+	fprintf(out, "Usage: %s [-d config_dir]\n", name);
+	fprintf(out, "  -d config_dir	Configuration file directory.\n");
+	fprintf(out, "                  The default directory is %s\n", config.dir);
+	exit(rcode);
+}
 
 int main(int argc, char **argv)
 {
@@ -585,13 +603,18 @@ int main(int argc, char **argv)
 		progname = argv[0];
 	}
 
-	while ((c = getopt(argc, argv, "d:H:p:qr:s:P:X:")) != EOF) switch(c) {
+	while ((c = getopt(argc, argv, "d:hH:p:qr:s:P:X:")) != EOF) switch(c) {
 		case 'd':
 			config.dir = optarg;
 			break;
 
+		case 'h':
+			usage(progname, 0);
+			break;
+
 		case 'H':
 			if (syntax_parse_help(optarg, &config.long_help, &config.short_help) < 0) exit(1);
+			config.dir = NULL;
 			break;
 
 		case 'p':
@@ -606,6 +629,7 @@ int main(int argc, char **argv)
 
 		case 's':
 			if (syntax_parse_file(optarg, &config.syntax) < 0) exit(1);
+			config.dir = NULL;
 			break;
 
 		case 'P':
@@ -619,8 +643,8 @@ int main(int argc, char **argv)
 			break;
 		    
 		default:
-			fprintf(stderr, "Usage: recli [-d config_dir] [-H help.md] [-p permission.txt] [-P prompt] [-s syntax] [-X syntax]\n");
-			exit(1);
+			usage(progname, 1);
+			break;
 		}
 
 	argc -= (optind - 1);
