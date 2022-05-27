@@ -575,8 +575,16 @@ static void usage(char const *name, int rcode)
 	if (rcode == 0) out = stdout;
 
 	fprintf(out, "Usage: %s [-d config_dir]\n", name);
-	fprintf(out, "  -d config_dir	Configuration file directory.\n");
-	fprintf(out, "                  The default directory is %s\n", config.dir);
+	fprintf(out, "  -d <config_dir>	Configuration file directory, defaults to '%s'\n", config.dir);
+	fprintf(out, "\n");
+	fprintf(out, "  Additional options which should be used only for testing,\n");
+	fprintf(out, "  as they will ignore the configuration directory\n");
+	fprintf(out, "  When testing, no commands will be executed.\n");
+	fprintf(out, "\n");
+	fprintf(out, "  -H help.txt     Load 'help.txt' as the help text file.\n");
+	fprintf(out, "  -s syntax.txt   Load syntax from 'syntax.txt'\n");
+	fprintf(out, "  -p perm.txt     Load permissions from 'perm.txt'\n");
+	fprintf(out, "  -X <flag>       Add debugging.  Valid flags are 'syntax'\n");
 	exit(rcode);
 }
 
@@ -621,6 +629,7 @@ int main(int argc, char **argv)
 			rcode = permission_parse_file(optarg, &config.permissions);
 			if (rcode < 0) exit(1);
 			if (rcode == 0) exit(0);
+			config.dir = NULL;
 			break;
 
 		case 'q':
