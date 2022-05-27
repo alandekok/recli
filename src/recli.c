@@ -16,7 +16,7 @@ static int in_string = 0;
 static size_t string_start = 0;
 
 static recli_config_t config = {
-	.dir = NULL,
+	.dir = "config",
 	.prompt = NULL,
 	.banner = NULL,
 	.syntax = NULL,
