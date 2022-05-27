@@ -22,7 +22,7 @@ case "$1" in
     shift
     case "$1" in
       syntax)	  
-        for exe in $(find ${RECLI_DIR}/plugins -type f -perm +1  | egrep -v '~|show|add|mod|del|config')
+        for exe in $(find ${RECLI_DIR}/plugins -type f -perm u+x  | egrep -v '~|show|add|mod|del|config')
         do
           cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,//,/,g;s,/, ,g")
           $exe --config syntax | sed "s/^/$cmd /"
