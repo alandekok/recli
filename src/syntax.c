@@ -2035,6 +2035,7 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 			}
 		}
 
+		/* FALL-THROUGH */
 	case CLI_TYPE_VARARGS:
 		argv[0] = this->first;
 		return 1;
@@ -2163,6 +2164,7 @@ static int syntax_walk_all(cli_syntax_t *this, void *ctx,
 	case CLI_TYPE_OPTIONAL:
 		if (rcode == CLI_WALK_SKIP) return 1;
 
+		/* FALL-THROUGH */
 	case CLI_TYPE_CONCAT:
 	case CLI_TYPE_ALTERNATE:
 		WALK(this->first);
