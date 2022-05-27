@@ -1,4 +1,4 @@
-all:  recli linenoise_example linenoise_utf8_example linenoise_cpp_example
+all:  recli linenoise_example linenoise_utf8_example linenoise_cpp_example ../recli
 
 linenoise_example: linenoise.h linenoise.c example.c
 	$(CC) -Wall -W -Os -g -o $@ linenoise.c example.c
@@ -28,3 +28,5 @@ $(RECLI_OBJS): linenoise.h recli.h datatypes.h
 
 recli: $(RECLI_OBJS)
 
+../recli: recli
+	@cp $< $@
