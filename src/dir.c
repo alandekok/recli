@@ -173,6 +173,12 @@ static int recli_fprintf_syntax(void *ctx, const char *fmt, ...)
 }
 
 
+/*
+ *	Run the given program, passing the "--config syntax" args.
+ *	The program should output the syntax that it is willing to
+ *	accept, in the same format as the `syntax.txt` file. This
+ *	is parsed and added to the syntax tree.
+ */
 int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 		      char *const envp[])
 {
@@ -234,6 +240,11 @@ int recli_exec_syntax(cli_syntax_t **phead, const char *dir, char *program,
 }
 
 
+/*
+ *	Read syntax from the scripts in a directory. Find all the
+ *	executable files and call recli_exec_syntax() to run them
+ *	to get syntax printed out. Recurses into subdirectories.
+ */
 int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip,
 		    char *const envp[])
 {
@@ -257,11 +268,13 @@ int recli_load_dirs(cli_syntax_t **phead, const char *name, size_t skip,
 		
 		if (stat(buffer, &s) != 0) continue;
 
+		/* recurse into directories */
 		if (S_ISDIR(s.st_mode)) {
 			recli_load_dirs(phead, buffer, skip, envp);
 			continue;
 		}
 
+		/* skip any non-regular and non-executable files */
 		if (!(S_IFREG & s.st_mode) ||
 		    !(S_IXUSR & s.st_mode)) continue;
 
@@ -311,8 +324,9 @@ int recli_load_syntax(recli_config_t *config)
 			    config->envp) < 0) return -1;
 
 		/*
-		 *	FIXME: dump syntax to syntax.cache file, and
-		 *	update cached inode.
+		 *	FIXME: dump syntax to cache/syntax.txt file, and
+		 *	update cached inode, rather than needing external
+		 *	'bin/rehash' script.
 		 */
 	}
 

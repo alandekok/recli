@@ -52,15 +52,15 @@ extern recli_datatype_t recli_datatypes[];
 extern int recli_datatypes_init(void);
 
 typedef struct recli_config_t {
-	const char *dir;
-	const char *prompt;
-	const char *banner;
-	char	   *envp[128];
-	cli_syntax_t *syntax;
-	ino_t		syntax_inode;
-	cli_syntax_t	*long_help;
-	cli_syntax_t	*short_help;
-	cli_permission_t *permissions;
+	const char *dir;		/* config directory (-d) */
+	const char *prompt;		/* top-level prompt (-P) */
+	const char *banner;		/* startup banner */
+	char	   *envp[128];		/* environment from [dir]/ENV */
+	cli_syntax_t *syntax;		/* parsed syntax structure */
+	ino_t		syntax_inode;	/* inode number of syntax file */
+	cli_syntax_t	*long_help;	/* parsed long help from (-H) or [dir]/help.md */
+	cli_syntax_t	*short_help;	/* parsed short help from (-H) or [dir]/help.md */
+	cli_permission_t *permissions;	/* perms parsed from [dir]/permissions/[user].txt */
 } recli_config_t;
 
 extern int recli_bootstrap(recli_config_t *config);

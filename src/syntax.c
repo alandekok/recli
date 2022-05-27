@@ -2025,6 +2025,15 @@ static int syntax_prefix_words(int argc, char *argv[], char const *word, int sen
 
 	switch (this->type) {
 	case CLI_TYPE_EXACT:
+		/*
+		 *	FIXME: if the possible syntax is a datatype, e.g. STRING
+		 *	or INTEGER, then we really shouldn't return it here -
+		 *	especially with a STRING, that can easily get added to
+		 *	the user's command, which would not be a syntax error
+		 *	and could cause problems if they don't realise and hit
+		 *	enter too fast.
+		 *	Can test for this here as this->next will be non-NULL.
+		 */
 		if (sense == CLI_MATCH_PREFIX) {
 			if (!word) return 0;
 
