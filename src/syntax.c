@@ -2319,6 +2319,7 @@ static cli_syntax_t *syntax_match_word(const char *word, int sense,
 
 	case CLI_TYPE_EXACT:
 		if (this->next) { /* call syntax checker */
+			/* FIXME: add somewhere for any errors to go */
 			if (!((recli_datatype_parse_t)this->next)(word, NULL)) {
 				return NULL; /* failed to match */
 			}

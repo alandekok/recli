@@ -14,7 +14,7 @@ static ssize_t parse_boolean(const char *buffer, const char **error)
 	if (strcmp(buffer, "1") == 0) return 1;
 	if (strcmp(buffer, "0") == 0) return 1;
 
-	*error = "Invalid value for boolean";
+	if (error) *error = "Invalid value for boolean";
 	return 0;
 }
 
@@ -22,23 +22,23 @@ static ssize_t parse_integer(const char *buffer, const char **error)
 {
 	long part;
 	char *end;
-	
+
 	part = strtol(buffer, &end, 10);
 
 	if ((part == LONG_MIN) || (part == LONG_MAX)) {
-		*error = "Integer value is out of bounds";
+		if (error) *error = "Integer value is out of bounds";
 		return 0;
 	}
 
 	if (*end) {
-		*error = "Unexpected text after decimal integer";
+		if (error) *error = "Unexpected text after decimal integer";
 		return 0;
 	}
 
 	return 1;
 }
 
-static ssize_t parse_ipv4prefix(const char *buffer, UNUSED const char **error)
+static ssize_t parse_ipv4prefix(const char *buffer, const char **error)
 {
 	char c;
 	int num, parts[5];
@@ -50,17 +50,17 @@ static ssize_t parse_ipv4prefix(const char *buffer, UNUSED const char **error)
 	}
 	for (num = 0; num < 4; num++) {
 		if (parts[num] < 0) {
-			*error = "Invalid address";
+			if (error) *error = "Invalid address";
 			return 0;
 		}
 		if (parts[num] > 255) {
-			*error = "Invalid address";
+			if (error) *error = "Invalid address";
 			return 0;
 		}
 	}
 
 	if ((parts[4] < 0) || (parts[4] > 32)) {
-		*error = "Invalid prefix length";
+		if (error) *error = "Invalid prefix length";
 		return 0;
 	}
 
@@ -98,7 +98,7 @@ static ssize_t parse_ipv6addr(const char *buffer, const char **error)
 		if ((*p >= 'a') && (*p <= 'f')) continue;
 		if ((*p >= 'A') && (*p <= 'F')) continue;
 
-		*error = "Invalid character in IPv6 address";
+		if (error) *error = "Invalid character in IPv6 address";
 		return 0;
 	}
 
@@ -106,7 +106,7 @@ static ssize_t parse_ipv6addr(const char *buffer, const char **error)
 }
 
 
-static ssize_t parse_ipv6prefix(const char *buffer, UNUSED const char **error)
+static ssize_t parse_ipv6prefix(const char *buffer, const char **error)
 {
 	char const *p;
 	long prefix;
@@ -120,7 +120,7 @@ static ssize_t parse_ipv6prefix(const char *buffer, UNUSED const char **error)
 
 		if (*p == '/') break;
 
-		*error = "Invalid character in IPv6 address";
+		if (error) *error = "Invalid character in IPv6 address";
 		return 0;
 	}
 
@@ -128,7 +128,7 @@ static ssize_t parse_ipv6prefix(const char *buffer, UNUSED const char **error)
 	
 	prefix = strtol(p, &end, 10);
 	if ((prefix < 0) || (prefix > 128)) {
-		*error = "Invalid prefix length";
+		if (error) *error = "Invalid prefix length";
 		return 0;
 	}
 	
@@ -142,7 +142,7 @@ static ssize_t parse_ipprefix(const char *buffer, const char **error)
 
 	if (parse_ipv6prefix(buffer, error) == 1) return 1;
 
-	*error = "Invalid syntax for IP prefix";
+	if (error) *error = "Invalid syntax for IP prefix";
 	return 0;
 }
 
@@ -152,7 +152,7 @@ static ssize_t parse_ipaddr(const char *buffer, const char **error)
 
 	if (parse_ipv6addr(buffer, error) == 1) return 1;
 
-	*error = "Invalid syntax for IP address";
+	if (error) *error = "Invalid syntax for IP address";
 	return 0;
 }
 
@@ -182,13 +182,13 @@ static ssize_t parse_label(const char *buffer, const char **error)
 	char const *p;
 
 	if (*buffer == '.') {
-		*error = "Too many '.'";
+		if (error) *error = "Too many '.'";
 		return 0;
 	}
 
 	for (p = buffer; *p && (*p != '.'); p++) {
 		if ((p - buffer) > 63) {
-			*error = "Label is too long";
+			if (error) *error = "Label is too long";
 			return 0;
 		}
 
@@ -197,7 +197,7 @@ static ssize_t parse_label(const char *buffer, const char **error)
 		if ((*p >= 'a') && (*p <= 'z')) continue;
 		if ((*p >= 'Z') && (*p <= 'Z')) continue;
 
-		*error = "Invalid character in host name";
+		if (error) *error = "Invalid character in host name";
 		return 0;
 	}
 
@@ -218,7 +218,7 @@ static ssize_t parse_hostname(const char *buffer, const char **error)
 	char const *p;
 
 	if (*buffer == '-') {
-		*error = "Host names cannot begin with '-'";
+		if (error) *error = "Host names cannot begin with '-'";
 		return 0;
 	}
 
@@ -243,7 +243,7 @@ static ssize_t parse_hostname(const char *buffer, const char **error)
 		total += label + 1;
 
 		if (total > 253) {
-			*error = "Host name is too long";
+			if (error) *error = "Host name is too long";
 			return 0;
 		}
 	}
