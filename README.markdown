@@ -37,5 +37,5 @@ anything else with the input unless you tell it to.
 
  * Partial commands can be entered.  When that happens, the prompt changes to indicate that more text is expected.  The final part of the command can be entered by itself.  This is useful when you need to entry a number of similar, but long commands.  Just enter the common prefix once, and then the unique trailing portions.
 
- * Configuration files can be placed in a subdirectory.  See [init/README.markdown](init/README.markdown)
+ * Configuration files can be placed in a subdirectory.  See [config/README.markdown](config/README.markdown)
 
