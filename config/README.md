@@ -27,7 +27,7 @@ number of configuration files in that directory:
 
 * `help.md`
   
-  The help text is loaded from this file.  See HELP.markdown
+  The help text is loaded from this file.  See HELP.md
 
   When this file does not exist, help is not available.
 
@@ -39,7 +39,7 @@ number of configuration files in that directory:
 
 * `syntax.txt`
   
-  The syntax is loaded from this file.  See SYNTAX.markdown
+  The syntax is loaded from this file.  See SYNTAX.md
 
   When this file does not exist, any input is allowed.
 
