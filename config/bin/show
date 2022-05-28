@@ -18,7 +18,7 @@ case "$1" in
     shift
     case "$1" in
       syntax)	  
-        for exe in $(find ${RECLI_DIR}/plugins -type f -name $name | egrep -v '~')
+        for exe in $(find -L ${RECLI_DIR}/plugins -type f -name $name | egrep -v '~')
         do
           cmd=$(echo $exe | sed "s,${RECLI_DIR}/plugins/,,;s,/$name,,;s,//,/,g;s,/, ,g")
           test ! -x "$exe" || "$exe" --config syntax | sed "s/^/$cmd /"

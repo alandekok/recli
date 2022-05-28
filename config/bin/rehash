@@ -22,14 +22,15 @@ then
    exit 1
 fi
 
-for exe in $(find ${RECLI_DIR}/bin -type f -perm u+x | egrep -v '~')
+for exe in $(find -L ${RECLI_DIR}/bin -type f | egrep -v '~')
 do
   cmd=$(echo $exe | sed "s,${RECLI_DIR}/bin/,,g;s,//,/,g;s,^DEFAULT\$,,;s,/, ,g")
-  $exe --config syntax | sed "s,^,$cmd ,;s,$cmd /,$cmd/," >> ${RECLI_DIR}/cache/syntax.txt.$$
+  test ! -x "$exe" || "$exe" --config syntax | sed "s,^,$cmd ,;s,$cmd /,$cmd/," >> "${RECLI_DIR}/cache/syntax.txt.$$"
 done
 
 #
 #  Do this as an atomic operation.  Other people may be using
 #  the CLI at the same time!
 #
-mv ${RECLI_DIR}/cache/syntax.txt.$$ ${RECLI_DIR}/cache/syntax.txt
+test ! -e "${RECLI_DIR}/cache/syntax.txt.$$" || \
+  mv "${RECLI_DIR}/cache/syntax.txt.$$" "${RECLI_DIR}/cache/syntax.txt"
