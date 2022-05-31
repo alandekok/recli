@@ -466,14 +466,17 @@ static int syntax_insert(cli_syntax_t *this)
 	uint32_t hash;
 	cli_syntax_t **new_table;
 
+	/* Create new hash table if not yet allocated */
 	if (!num_entries) {
 		hash_table = calloc(sizeof(hash_table[0]), 256);
 		if (!hash_table) return 0;
 		table_size = 256;
 	}
 
+	/* Ensure entry we are inserting has a unique hash */
 	if (!this->hash) syntax_hash(this);
 
+	/* Better not be able to find it already */
 	assert(syntax_find(this) == NULL);
 
 #ifndef NDEBUG
@@ -489,6 +492,10 @@ static int syntax_insert(cli_syntax_t *this)
 #endif
 
 retry:
+	/*
+	 *	Look for the hash in the table. If the slot is
+	 *	free, insert the entry there and return.
+	 */
 	hash = this->hash;
 	if (!hash_table[hash & (table_size - 1)]) {
 		hash_table[hash & (table_size - 1)] = this;
@@ -499,6 +506,12 @@ retry:
 	      
 	assert(this != hash_table[hash & (table_size - 1)]);
 
+	/*
+	 *	Slot wasn't free. We'll double the table size and
+	 *	try again. Copy all entries from old table to new
+	 *	table, inserting into the newly calculated hash
+	 *	slot.
+	 */
 	new_table = calloc(sizeof(new_table[0]), table_size * 2);
 	if (!new_table) return 0;
 

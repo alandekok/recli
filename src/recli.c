@@ -510,7 +510,7 @@ static void process(int tty, char *line)
 	/*
 	 *	FIXME: figure out which thing we didn't have permission for.
 	 *
-	 *	Note that we check the permissions on the FULL arguments, because that's how it works.q
+	 *	Note that we check the permissions on the FULL arguments, because that's how it works.
 	 */
 	if (!permission_enforce(config.permissions, ctx_stack->total_argc + argc,
 				ctx_argv)) {
