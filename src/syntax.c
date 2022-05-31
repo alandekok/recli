@@ -80,20 +80,6 @@ struct cli_syntax_t {
 #define FNV_MAGIC_INIT (0x811c9dc5)
 #define FNV_MAGIC_PRIME (0x01000193)
 
-static uint32_t fnv_hash(const void *data, size_t size)
-{
-	const uint8_t *p = data;
-	const uint8_t *q = p + size;
-	uint32_t      hash = FNV_MAGIC_INIT;
-
-	while (p != q) {
-		hash *= FNV_MAGIC_PRIME;
-		hash ^= (uint32_t) (*p++);
-    }
-
-    return hash;
-}
-
 static uint32_t fnv_hash_update(const void *data, size_t size, uint32_t hash)
 {
 	const uint8_t *p = data;
@@ -102,8 +88,14 @@ static uint32_t fnv_hash_update(const void *data, size_t size, uint32_t hash)
 	while (p != q) {
 		hash *= FNV_MAGIC_PRIME;
 		hash ^= (uint32_t) (*p++);
-    }
-    return hash;
+	}
+
+	return hash;
+}
+
+static uint32_t fnv_hash(const void *data, size_t size)
+{
+	return fnv_hash_update(data, size, FNV_MAGIC_INIT);
 }
 
 static cli_syntax_t *syntax_find(cli_syntax_t *this);
