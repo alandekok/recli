@@ -3008,10 +3008,14 @@ int syntax_parse_help(const char *filename, cli_syntax_t **plong, cli_syntax_t *
 			continue;
 		}
 
-		strcat(buffer, "\r\n");
-
 		len = strlen(buffer);
+		if (len > sizeof(buffer) - 3) goto too_long;
+
+		strcat(buffer, "\r\n");
+		len += 2;
+
 		if ((h + len) >= (help + sizeof(help))) {
+		too_long:
 			recli_fprintf(recli_stderr, "%s line %d: Too much help text\n",
 				filename, lineno);
 			syntax_free(long_syntax);
