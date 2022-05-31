@@ -2817,7 +2817,10 @@ int syntax_parse_file(const char *filename, cli_syntax_t **phead)
 	char buffer[1024];
 	cli_syntax_t *head;
 
-	if (!phead) return -1;
+	if (!phead) {
+		recli_fprintf(recli_stderr, "Reading syntax: internal error\n");
+		return -1;
+	}
 
 	if (!*phead) {
 		recli_datatypes_init();
