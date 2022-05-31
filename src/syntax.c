@@ -68,7 +68,7 @@ struct cli_syntax_t {
 	cli_type_t type;
 
 	uint32_t hash;
-	void  *first;
+	void *first;
 	void *next;
 
 	int refcount;
@@ -1200,8 +1200,10 @@ static void syntax_debug_printf(cli_type_t type, const char *msg,
 			       void *first, void *next)
 {
 	printf("{ ");
-	if ((type == CLI_TYPE_EXACT) || (type == CLI_TYPE_VARARGS)) {
-		printf("%s } %s\n", first, msg);
+	if ((type == CLI_TYPE_EXACT) ||
+	    (type == CLI_TYPE_FORCE_EXACT) ||
+	    (type == CLI_TYPE_VARARGS)) {
+		printf("%s } %s\n", (char *)first, msg);
 		return;
 	}
 
