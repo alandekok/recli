@@ -54,12 +54,15 @@ static int load_envp(const char *dir, recli_config_t *config)
 {
 	int argc;
 	FILE *fp;
+	char name[1024];
 	char buffer[8192];
+	int line = 0;
 
-	snprintf(buffer, sizeof(buffer), "%s/ENV", dir);
-	fp = fopen(buffer, "r");
+	snprintf(name, sizeof(name), "%s/ENV", dir);
+	fp = fopen(name, "r");
 	if (!fp) {
 		if (errno == ENOENT) return 0;
+		fprintf(stderr, "Error opening environment file '%s'\n", name);
 		return -1;
 	}
 
@@ -67,6 +70,8 @@ static int load_envp(const char *dir, recli_config_t *config)
 
 	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
 		char *p;
+
+		line++;
 
 		for (p = buffer; *p != '\0'; p++) {
 			if ((*p == '\n') || (*p == '\r')) {
@@ -76,6 +81,7 @@ static int load_envp(const char *dir, recli_config_t *config)
 		}
 
 		if (p == (buffer + sizeof(buffer) - 1)) {
+			fprintf(stderr, "Line too long at %s:%d\n", name, line);
 			return -1; /* line too long */
 		}
 
@@ -98,7 +104,10 @@ static int load_envp(const char *dir, recli_config_t *config)
 		}
 
 		config->envp[argc++] = strdup(buffer);
-		if (argc >= 127) return -1;
+		if (argc >= 127) {
+			fprintf(stderr, "Too many arguments defined (max 127) at %s:%d\n", name, line);
+			return -1;
+		}
 	}
 
 	snprintf(buffer, sizeof(buffer), "RECLI_DIR=%s", dir);
