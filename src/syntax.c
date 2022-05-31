@@ -1249,7 +1249,7 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 		break;
 
 	case CLI_TYPE_VARARGS:
-		if (strcmp((char *) first, "...") != 0) return 0;
+		if (strcmp((char *) first, "...") != 0) return NULL;
 		assert(next == NULL);
 		break;
 
@@ -1273,13 +1273,13 @@ static cli_syntax_t *syntax_alloc(cli_type_t type, void *first, void *next)
 			/*
 			 *	Names must begin with a letter.
 			 */
-			if (!isalpha((int) *p)) return 0;
+			if (!isalpha((int) *p)) return NULL;
 
 			lowercase = 0;
 			uppercase = 0;
 
 			while (*p) {
-				if (*p < ' ') return 0; /* can't create binary names */
+				if (*p < ' ') return NULL; /* can't create binary names */
 
 				if (islower((int) *p)) {
 					lowercase = 1;
