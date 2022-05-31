@@ -563,6 +563,13 @@ add_line:
 		recli_exec(buffer, needs_tty, ctx_stack->total_argc + argc,
 			   ctx_argv, config.envp);
 		recli_load_syntax(&config);
+
+		/* If the config was reloaded, update the stack */
+		if (config.syntax != ctx_stack->syntax) {
+			while (ctx_stack_index > 0) ctx_stack_pop();
+			ctx_stack->syntax = config.syntax;
+		}
+
 		fflush(stdout);
 		fflush(stderr);
 	}
