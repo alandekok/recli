@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "linenoise.h"
+#include "recli.h"
 
 #ifndef NO_COMPLETION
 void completion(const char *buf, linenoiseCompletions *lc) {
@@ -56,11 +57,8 @@ int foundquote(const char *buf, size_t len, char c) {
     return 0;
 }
 
-int foundhelp(const char *buf, size_t len, char c) {
+int foundhelp(const char *buf, UNUSED size_t len, UNUSED char c) {
     if (in_string) return 0;
-
-    len = len;			/* -Wunused */
-    c = c;			/* -Wunused */
 
     printf("?\r\nHELP: %s\r\n", buf);
     return 1;
